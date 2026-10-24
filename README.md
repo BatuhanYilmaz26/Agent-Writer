@@ -42,7 +42,7 @@ Docker Compose profile are in [Setup and operations](docs/setup-and-operations.m
 | `scripts/` | Fresh-checkout smoke test, corpus generator and deterministic evaluator. |
 | `evaluation/corpus/v1/` | Versioned quality corpus, editorial rubric and regression baseline. |
 | `ops/` | Prometheus alert rules and retention service/timer units. |
-| `docs/` | User, setup, configuration, workflow, provider and runbook documentation. |
+| `docs/` | User, setup, configuration, workflow and provider documentation. Internal runbooks and evidence stay local. |
 | `Dockerfile`, `compose.yaml` | Non-root production-shaped local image and loopback Compose profile. |
 | `requirements.in`, `requirements.lock` | Direct runtime pins and hashed transitive runtime lock. |
 | `requirements-dev.in`, `requirements-dev.lock` | Direct development pins and hashed transitive development lock. |
