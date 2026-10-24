@@ -462,8 +462,11 @@ def make_fixture_dependencies(
         {"id": "section_1", "order": 1, "title": "A starting point", "goal": "Introduce the requested topic as a synthetic development example", "target_words": first, "evidence_ids": [excerpt_id] if researched else []},
         {"id": "section_2", "order": 2, "title": "What to consider next", "goal": "Offer a synthetic continuation that requires human review", "target_words": request.target_words - first, "evidence_ids": [excerpt_id] if researched else []},
     ]
+    title = request.topic
+    if len(title) > 240:
+        title = title[:237].rstrip() + "..."
     responses: dict[str, dict[str, Any]] = {
-        "plan": {"title": request.topic, "audience": request.audience, "tone": request.tone, "target_words": request.target_words, "tasks": tasks},
+        "plan": {"title": title, "audience": request.audience, "tone": request.tone, "target_words": request.target_words, "tasks": tasks},
     }
     for revision in range(max_review_rounds + 1):
         for task in tasks:

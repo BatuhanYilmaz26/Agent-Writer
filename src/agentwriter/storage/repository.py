@@ -807,6 +807,13 @@ class Repository:
                     "FROM runs WHERE deleted_at IS NULL"
                 )
             ).fetchone()
+            leases = await (
+                await connection.execute(
+                    "SELECT count(*) AS expired FROM jobs j JOIN runs r ON r.id=j.run_id "
+                    "WHERE j.lease_owner IS NOT NULL AND j.lease_expires_at<=clock_timestamp() "
+                    "AND r.state IN ('running','cancel_requested') AND r.deleted_at IS NULL"
+                )
+            ).fetchone()
             workers = await (
                 await connection.execute(
                     "SELECT count(*) FILTER (WHERE last_seen>clock_timestamp()-(%s*interval '1 second') "
@@ -841,10 +848,17 @@ class Repository:
                     "SELECT count(*) AS total FROM run_events WHERE created_at>clock_timestamp()-interval '24 hours'"
                 )
             ).fetchone()
-            assert queue is not None and workers is not None and spend is not None and events is not None
+            assert (
+                queue is not None
+                and leases is not None
+                and workers is not None
+                and spend is not None
+                and events is not None
+            )
             return {
                 "states": states,
                 "queue": dict(queue),
+                "expired_leases": leases["expired"],
                 "workers": dict(workers),
                 "provider_calls_24h": calls,
                 "spend_today": {

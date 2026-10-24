@@ -15,10 +15,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 _REDACTIONS = (
+    # Bearer first: an Authorization header otherwise leaves the token after
+    # the scheme when the header pattern consumes only the first word.
+    (re.compile(r"(?i)Bearer\s+[A-Za-z0-9._~+/=-]+"), "Bearer [REDACTED]"),
     (re.compile(r"(?i)(authorization|cookie|x-csrf-token|x-treg-token)\s*[:=]\s*\S+"), r"\1=[REDACTED]"),
     (re.compile(r"(?i)(api[_-]?key|token|password|secret)\s*[:=]\s*[^\s,;]+"), r"\1=[REDACTED]"),
     (re.compile(r"postgres(?:ql)?://[^\s\"']+"), "postgresql://[REDACTED]"),
-    (re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]+"), "Bearer [REDACTED]"),
     (re.compile(r"aw_session=[^;\s]+"), "aw_session=[REDACTED]"),
 )
 
@@ -58,13 +60,20 @@ class TextFormatter(logging.Formatter):
 
 
 class RedactionFilter(logging.Filter):
-    """Apply redaction before any handler, including third-party handlers."""
+    """Apply redaction before any handler, including third-party handlers.
+
+    Render first so a redaction cannot consume a ``%s`` placeholder and leave
+    the argument tuple inconsistent. The rendered message replaces the format
+    string and the arguments are cleared.
+    """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.msg, str):
-            record.msg = redact(record.msg)
-        if record.args:
-            record.args = tuple(redact(arg) if isinstance(arg, str) else arg for arg in record.args)
+        try:
+            rendered = record.getMessage()
+        except (TypeError, ValueError):
+            rendered = str(record.msg)
+        record.msg = redact(rendered)
+        record.args = ()
         return True
 
 

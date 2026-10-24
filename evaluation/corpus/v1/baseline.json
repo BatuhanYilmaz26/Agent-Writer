@@ -1,0 +1,59 @@
+{
+  "corpus_version": "1.0.0",
+  "evaluator_version": "1.0.0",
+  "graph_version": "v1",
+  "result_hash": "1cf921c8b8e5f6759e6331e8b97d1a6d726dd2acf8d1eaae76242e4fa4a989f3",
+  "summary": {
+    "total_entries": 38,
+    "valid_cases": 32,
+    "rejection_cases": 6,
+    "passed": 38,
+    "failed": 0,
+    "all_passed": true,
+    "checks_total": 346,
+    "checks_passed": 346,
+    "categories": {
+      "adversarial_rejection_empty_topic": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_rejection_oversized_instructions": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_rejection_research_off_current": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_rejection_research_off_named": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_rejection_too_long": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_rejection_too_short": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_valid": {
+        "total": 8,
+        "passed": 8
+      },
+      "creative_off": {
+        "total": 8,
+        "passed": 8
+      },
+      "general_off": {
+        "total": 8,
+        "passed": 8
+      },
+      "source_required": {
+        "total": 8,
+        "passed": 8
+      }
+    }
+  },
+  "note": "Regenerate only after an intentional corpus, evaluator or graph-output change; review the full result manifest first."
+}

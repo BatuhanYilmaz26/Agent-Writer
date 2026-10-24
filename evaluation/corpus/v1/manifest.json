@@ -1,0 +1,82 @@
+{
+  "corpus_version": "1.0.0",
+  "created_at": "2026-10-24",
+  "snapshot_only": true,
+  "counts": {
+    "snapshot_entries": 38,
+    "valid_snapshot_briefs": 32,
+    "expected_rejections": 6,
+    "live_entries_not_executed": 16
+  },
+  "distribution": {
+    "adversarial_rejection_empty_topic": 1,
+    "adversarial_rejection_oversized_instructions": 1,
+    "adversarial_rejection_research_off_current": 1,
+    "adversarial_rejection_research_off_named": 1,
+    "adversarial_rejection_too_long": 1,
+    "adversarial_rejection_too_short": 1,
+    "adversarial_valid": 8,
+    "creative_off": 8,
+    "general_off": 8,
+    "source_required": 8
+  },
+  "target_word_bands": {
+    "400": 1,
+    "500": 4,
+    "600": 4,
+    "700": 4,
+    "800": 10,
+    "900": 4,
+    "1000": 5,
+    "1200": 5,
+    "4000": 1
+  },
+  "files": {
+    "briefs.jsonl": {
+      "sha256": "f88492b0825d63cf11d1ab9844547d46ceebd7127d5a7d6ca4398c7cac4c9190",
+      "entries": 38
+    },
+    "live.jsonl": {
+      "sha256": "6bbf8f34d2e10e760ace5d80b57c78444d5fffde6b6e5aa5a63c590ed515c032",
+      "entries": 16
+    },
+    "rubric.md": {
+      "sha256": "d9ec7451cfde58191a89e0fbb06cedd8771a6a8f8e731f68b43a25fc31cd9f5c",
+      "version": "1.0.0"
+    }
+  },
+  "editorial_rubric": {
+    "file": "rubric.md",
+    "version": "1.0.0",
+    "pass_mean": 3.5,
+    "minimum_dimension": 3,
+    "evidence_integrity_source_required": 4,
+    "safety_minimum": 4
+  },
+  "human_sampling": {
+    "population": 32,
+    "sample_size": 10,
+    "fraction": 0.3125,
+    "strata": {
+      "creative_off": 3,
+      "general_off": 3,
+      "source_required": 3,
+      "adversarial_valid": 1
+    },
+    "reviewers": 2,
+    "blind": true,
+    "denominator": "10 sampled briefs x 2 reviewers = 20 independent reviews; agreement is reported per stratum and overall",
+    "agreement_target": "Cohen's kappa >= 0.60; differences above one point are adjudicated",
+    "status": "planned; QAL-03 human review remains blocked until real reviewers are available"
+  },
+  "snapshot_live_boundary": "briefs.jsonl is deterministic fixture evidence only. live.jsonl requires qualified OpenRouter and Treg credentials, ENABLE_EXTERNAL_CALLS=true, budget policy and QAL-03 human review; the fixture evaluator never executes it.",
+  "adversarial_set": [
+    "prompt injection in topic and instructions",
+    "conflicting numeric claims",
+    "long source-dependent brief",
+    "named vendor/model",
+    "legal, medical and financial sensitivity",
+    "boundary validation rejections (empty, short, long, oversized instructions, research-off)"
+  ],
+  "case_hash": "b53f692cbf08d54089c69fd15dd6e7563f4eb7d83d53bfebcdeadfb0ed786ebf"
+}

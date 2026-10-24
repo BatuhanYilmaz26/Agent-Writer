@@ -472,6 +472,119 @@ async def test_retention_purges_only_old_terminal_runs_and_expired_sessions(data
 
 
 @pytest.mark.asyncio
+async def test_retention_handles_tombstones_checkpoints_and_per_run_sources(database):
+    repository, _ = database
+    old = await repository.create_run("alice", {"topic": "Old article"}, "retention-old")
+    claim = await repository.claim_job("retention-worker")
+    assert claim is not None and claim.run_id == old["id"]
+    await repository.finalize(claim, "# Old\n\nRetained until retention.", review_status="needs_review")
+    await claim.close()
+    bob = await repository.create_run("bob", {"topic": "Bob article"}, "retention-bob")
+    bob_claim = await repository.claim_job("retention-worker")
+    assert bob_claim is not None and bob_claim.run_id == bob["id"]
+    await repository.finalize(bob_claim, "# Bob\n\nStill fresh.", review_status="needs_review")
+    await bob_claim.close()
+    recent_delete = await repository.create_run(
+        "alice", {"topic": "Recent tombstone"}, "retention-recent-delete"
+    )
+    await repository.delete_run("alice", recent_delete["id"])
+    old_delete = await repository.create_run(
+        "alice", {"topic": "Old tombstone"}, "retention-old-delete"
+    )
+    await repository.delete_run("alice", old_delete["id"])
+    active = await repository.create_run("alice", {"topic": "Active article"}, "retention-active")
+
+    async with repository.pool.connection() as connection:
+        await connection.execute(
+            "UPDATE runs SET updated_at=clock_timestamp()-interval '40 days' WHERE id=%s",
+            (old["id"],),
+        )
+        await connection.execute(
+            "UPDATE runs SET deleted_at=clock_timestamp()-interval '48 hours',"
+            " updated_at=clock_timestamp()-interval '48 hours' WHERE id=%s",
+            (old_delete["id"],),
+        )
+        await connection.execute(
+            "INSERT INTO sources(run_id,source_id,source_data,created_at) VALUES "
+            "(%s,'alice-source','{\"title\":\"Alice\"}',clock_timestamp()-interval '10 days'),"
+            "(%s,'bob-source','{\"title\":\"Bob\"}',clock_timestamp()-interval '10 days')",
+            (old["id"], bob["id"]),
+        )
+        await connection.execute(
+            "INSERT INTO run_events(run_id,sequence,event_key,event_type,payload,created_at) "
+            "VALUES (%s,2,'old-active-event','progress','{}',clock_timestamp()-interval '10 days')",
+            (active["id"],),
+        )
+        await connection.execute(
+            "UPDATE idempotency_keys SET expires_at=clock_timestamp()-interval '1 hour' "
+            "WHERE key IN ('retention-old','retention-old-delete')"
+        )
+        await connection.execute(
+            "UPDATE runs SET next_event_sequence=2 WHERE id=%s", (active["id"],)
+        )
+
+    checkpoints: list[str] = []
+
+    async def delete_checkpoint(run_id: str) -> None:
+        checkpoints.append(run_id)
+
+    removed = await repository.purge_expired(
+        event_retention_days=7,
+        source_retention_days=7,
+        run_retention_days=30,
+        deleted_grace_hours=24,
+        batch_size=10,
+        delete_checkpoint=delete_checkpoint,
+    )
+    assert removed["retained_runs"] == 1
+    assert removed["deleted_runs"] == 1
+    assert removed["sources"] == 1
+    assert removed["events"] == 1
+    assert removed["keys"] == 2
+    assert set(checkpoints) == {old["id"], old_delete["id"]}
+
+    with pytest.raises(StorageError) as old_gone:
+        await repository.get_run("alice", old["id"])
+    assert old_gone.value.status_code == 404
+    with pytest.raises(StorageError) as old_delete_gone:
+        await repository.get_run("alice", old_delete["id"])
+    assert old_delete_gone.value.status_code == 404
+
+    # The tombstone inside the grace window survives; the other owner's run and
+    # its source are untouched because retention is run-scoped.
+    assert (await repository.get_run("bob", bob["id"]))["state"] == "needs_review"
+    assert [source["title"] for source in await repository.sources("bob", bob["id"])] == ["Bob"]
+    assert (await repository.get_run("alice", active["id"]))["state"] == "queued"
+    async with repository.pool.connection() as connection:
+        tombstone = await (
+            await connection.execute(
+                "SELECT count(*) AS count FROM runs WHERE id=%s AND deleted_at IS NOT NULL",
+                (recent_delete["id"],),
+            )
+        ).fetchone()
+        old_events = await (
+            await connection.execute(
+                "SELECT count(*) AS count FROM run_events WHERE event_key='old-active-event'"
+            )
+        ).fetchone()
+        keys = await (
+            await connection.execute(
+                "SELECT count(*) AS count FROM idempotency_keys "
+                "WHERE key IN ('retention-old','retention-old-delete')"
+            )
+        ).fetchone()
+        active_key = await (
+            await connection.execute(
+                "SELECT count(*) AS count FROM idempotency_keys WHERE key='retention-active'"
+            )
+        ).fetchone()
+    assert tombstone is not None and tombstone["count"] == 1
+    assert old_events is not None and old_events["count"] == 0
+    assert keys is not None and keys["count"] == 0
+    assert active_key is not None and active_key["count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_database_session_loss_fences_old_saver_and_allows_successor(database):
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
     from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer

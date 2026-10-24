@@ -151,7 +151,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/ready")
     async def ready(request: Request):
-        ok = await request.app.state.repository.ready(freshness_seconds=configured.worker_stale_seconds)
+        try:
+            ok = await request.app.state.repository.ready(
+                freshness_seconds=configured.worker_stale_seconds
+            )
+        except Exception:
+            logger.exception("Readiness probe failed")
+            ok = False
         return JSONResponse({"status": "ready" if ok else "unavailable"}, status_code=200 if ok else 503)
 
     def set_session_cookie(request: Request, response: Response, token: str) -> None:
@@ -380,6 +386,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "# HELP agentwriter_runs_overdue Nonterminal runs past their deadline.",
                 "# TYPE agentwriter_runs_overdue gauge",
                 f"agentwriter_runs_overdue {int(queue['overdue'])}",
+                "# HELP agentwriter_expired_leases Running jobs whose worker lease has expired.",
+                "# TYPE agentwriter_expired_leases gauge",
+                f"agentwriter_expired_leases {int(snapshot['expired_leases'])}",
                 "# HELP agentwriter_workers Worker registry by health.",
                 "# TYPE agentwriter_workers gauge",
                 f'agentwriter_workers{{state="alive"}} {int(snapshot["workers"]["alive"])}',

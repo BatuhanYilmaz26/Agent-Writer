@@ -1,0 +1,21 @@
+[Unit]
+Description=AgentWriter bounded retention purge
+Documentation=file:/opt/agentwriter/docs/runbooks/retention.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=agentwriter
+Group=agentwriter
+WorkingDirectory=/opt/agentwriter
+EnvironmentFile=/etc/agentwriter/agentwriter.env
+ExecStart=/opt/agentwriter/.venv/bin/python -m agentwriter retention --batch-size 100
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/agentwriter/.local
+TimeoutStartSec=300

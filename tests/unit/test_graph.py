@@ -109,6 +109,18 @@ async def test_official_fixture_helper_always_discloses_synthetic_run() -> None:
     assert any(issue["code"] == "synthetic_fixture" for issue in result["issues"])
 
 
+async def test_fixture_helper_bounds_a_long_valid_topic_title() -> None:
+    request = CreateRunRequest(
+        topic=("long topic " * 44).strip(), target_words=500, research_mode="required"
+    )
+    assert len(request.topic) > 240
+    result = await build_graph(make_fixture_dependencies(request)).compile().ainvoke(
+        initial_state(), {"recursion_limit": 50}
+    )
+    assert len(result["plan"]["title"]) <= 240
+    assert result["plan"]["title"].endswith("...")
+
+
 def test_section_reducer_is_idempotent_associative_and_conflict_rejecting() -> None:
     first = SectionDraft(task_id="one", title="One", content_markdown="First").model_dump(mode="json")
     second = SectionDraft(task_id="two", title="Two", content_markdown="Second").model_dump(mode="json")

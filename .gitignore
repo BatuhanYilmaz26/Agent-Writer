@@ -100,3 +100,17 @@ opencode.local.jsonc
 /evidence/
 /archives/
 *.bundle
+
+# Public product documentation. Tracker, production guide, evidence, runbooks,
+# development notes and archives remain private by default.
+!/docs/
+/docs/*
+!/docs/user-guide.md
+!/docs/setup-and-operations.md
+!/docs/configuration.md
+!/docs/workflow.md
+!/docs/providers.md
+!/docs/budgets.md
+
+# Public editorial rubric; corpus JSON/data stays versioned without Markdown.
+!/evaluation/corpus/v1/rubric.md
