@@ -1,0 +1,31 @@
+[project]
+name = "agentwriter"
+version = "0.1.0"
+description = "Source-aware article writing with durable execution and explicit review."
+requires-python = ">=3.13,<3.14"
+dynamic = ["dependencies"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = ["integration: requires a disposable real PostgreSQL database", "external: requires explicitly qualified provider credentials"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.13"
+mypy_path = "src"
+packages = ["agentwriter"]
+check_untyped_defs = true
+warn_unused_ignores = true
+no_implicit_optional = true
+
+[tool.uv]
+package = false
