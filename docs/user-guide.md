@@ -41,8 +41,9 @@ Fill in:
   an explanation and a correlation reference if it is still submitted. This is a
   deliberate boundary, not a model judgement.
 
-Submitting the same brief twice reuses the same durable run through an
-idempotency key. It does not create a duplicate draft.
+While a submission is in flight, retrying the same brief reuses one durable run
+through an idempotency key. It does not create a duplicate draft. After the run
+is accepted, a new submission of the same brief is a new run.
 
 ## Watch a run
 
