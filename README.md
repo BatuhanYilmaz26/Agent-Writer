@@ -22,7 +22,9 @@ uv venv .venv --python python
 uv pip sync --python .venv\Scripts\python.exe --require-hashes --only-binary :all: --index-url https://pypi.org/simple requirements-dev.lock
 $env:PYTHONPATH = (Join-Path (Get-Location) 'src')
 Copy-Item .env.example .env
-# Set DATABASE_URL and MIGRATION_DATABASE_URL in .env, then:
+# Put the DSNs in .env, then export them in this shell for the migration
+# command; the exact commands are in Setup and operations. The migration
+# command does not read .env automatically.
 .\.venv\Scripts\python.exe -m agentwriter.storage.migrate --directory migrations --runtime-role agentwriter_runtime
 .\.venv\Scripts\python.exe -m agentwriter --env-file .env serve
 # In a second terminal:
