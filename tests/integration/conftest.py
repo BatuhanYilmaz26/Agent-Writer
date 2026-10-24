@@ -69,7 +69,7 @@ async def api_client(acceptance_database: str) -> AsyncIterator[tuple[httpx.Asyn
     async with app.router.lifespan_context(app):
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
-            response = await client.get("/api/v1/session")
+            response = await client.post("/api/v1/session")
             assert response.status_code == 200
             client.headers["X-CSRF-Token"] = response.json()["csrf_token"]
             yield client, app

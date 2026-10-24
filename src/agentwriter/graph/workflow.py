@@ -24,18 +24,17 @@ from agentwriter.domain import (
     ContentPlan,
     CreateRunRequest,
     EditorialReview,
-    EvidenceExcerpt,
     ReviewIssue,
     SectionDraft,
     SectionTask,
-    Source,
     markdown_hash,
 )
-from agentwriter.providers.base import ModelGateway, ModelResult, ModelT, ProviderError
+from agentwriter.providers.base import ModelGateway, ModelResult, ModelT
 from agentwriter.providers.fixture import FixtureGateway, FixtureResearchGateway
 from agentwriter.services.citations import CitationError, render_citations, validate_citations
+from agentwriter.services.claims import extract_claim_assessments, unsupported_claim_issues
 from agentwriter.services.policy import determine_research
-from agentwriter.services.urls import canonicalize_url
+from agentwriter.services.research import ResearchCoordinator, ResearchLimits, relevant_evidence_ids
 
 AsyncCheck = Callable[[], Awaitable[None]]
 AsyncRecord = Callable[[dict[str, Any]], Awaitable[None]]
@@ -67,12 +66,14 @@ class GraphState(TypedDict, total=False):
     plan: dict[str, Any]
     sources: dict[str, dict[str, Any]]
     excerpts: dict[str, dict[str, Any]]
+    research_limitations: list[str]
     sections: Annotated[dict[str, dict[str, Any]], merge_sections]
     revision: int
     rewrite_ids: list[str]
     assembled_markdown: str
     final_markdown: str
     deterministic_issues: list[dict[str, Any]]
+    claims: list[dict[str, Any]]
     issues: list[dict[str, Any]]
     review: dict[str, Any]
     review_status: str
@@ -103,6 +104,8 @@ class GraphHooks:
 
     check_active: AsyncCheck | None = None
     before_model_call: Callable[[str], Awaitable[None]] | None = None
+    on_policy: AsyncRecord | None = None
+    on_research: Callable[[list[str], int], Awaitable[None]] | None = None
     on_plan: AsyncRecord | None = None
     on_source: Callable[[dict[str, Any], dict[str, Any]], Awaitable[None]] | None = None
     on_section: AsyncRecord | None = None
@@ -121,6 +124,11 @@ class GraphDependencies:
     max_model_calls: int = 32
     max_concurrency: int = 3
     initial_model_calls: int = 0
+    max_output_tokens: int = 8192
+    max_research_queries: int = 4
+    max_results_per_query: int = 5
+    max_extracted_pages: int = 8
+    max_evidence_tokens: int = 12_000
     _call_count: int = field(default=0, init=False, repr=False)
     _call_lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
     _semaphore: asyncio.Semaphore = field(init=False, repr=False)
@@ -130,6 +138,8 @@ class GraphDependencies:
             raise ValueError("At most two correction rounds are permitted")
         if not 1 <= self.max_model_calls <= 128 or not 1 <= self.max_concurrency <= 16:
             raise ValueError("Finite call/concurrency limits are required")
+        if not 256 <= self.max_output_tokens <= 8192:
+            raise ValueError("Invalid model output token limit")
         if not 0 <= self.initial_model_calls <= self.max_model_calls:
             raise ValueError("Initial attempts exceed the call budget")
         self._call_count = self.initial_model_calls
@@ -155,7 +165,7 @@ class GraphDependencies:
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False, allow_nan=False)},
             ]
             try:
-                result = await self.model.generate(schema, messages, identity, max_tokens=8192)
+                result = await self.model.generate(schema, messages, identity, max_tokens=self.max_output_tokens)
             except Exception as exc:
                 if self.hooks and self.hooks.on_model_error:
                     await self.hooks.on_model_error(identity, exc)
@@ -194,7 +204,10 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
         await deps.check_active()
         run_id = str(UUID(state["run_id"]))
         decision = determine_research(deps.request)
-        return {"run_id": run_id, "decision": decision.model_dump(mode="json"), "revision": 0, "rewrite_ids": []}
+        data = decision.model_dump(mode="json")
+        if deps.hooks and deps.hooks.on_policy:
+            await deps.hooks.on_policy(data)
+        return {"run_id": run_id, "decision": data, "revision": 0, "rewrite_ids": []}
 
     def policy_route(state: GraphState) -> str:
         return "research" if state["decision"]["need_research"] else "plan"
@@ -203,33 +216,39 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
         await deps.check_active()
         sources: dict[str, dict[str, Any]] = {}
         excerpts: dict[str, dict[str, Any]] = {}
+        limitations: list[str] = []
         if deps.research is not None:
-            urls: dict[str, str] = {}
-            for query in state["decision"]["queries"][:4]:
-                await deps.check_active()
-                results = await deps.research.search(query, max_results=5)
-                for result in results[:5]:
-                    url = canonicalize_url(result["url"])
-                    urls.setdefault(url, result["url"])
-            for url in list(urls.values())[:8]:
-                await deps.check_active()
-                try:
-                    extracted = await deps.research.extract(url)
-                except ProviderError:
-                    # A failed page is not evidence; an empty pack is carried
-                    # to the explicit evidence gate rather than fabricated.
-                    continue
-                source = Source.model_validate(extracted["source"])
-                excerpt = EvidenceExcerpt.model_validate(extracted["excerpt"])
-                if excerpt.source_id != source.id:
-                    raise GraphError("evidence_source_identity_mismatch")
-                if len(json.dumps(excerpts, ensure_ascii=False).encode("utf-8")) + len(excerpt.text.encode("utf-8")) > 48_000:
-                    break
-                sources[source.id] = source.model_dump(mode="json")
-                excerpts[excerpt.id] = excerpt.model_dump(mode="json")
+            coordinator = ResearchCoordinator(
+                deps.research,
+                ResearchLimits(
+                    max_queries=deps.max_research_queries,
+                    max_results_per_query=deps.max_results_per_query,
+                    max_pages=deps.max_extracted_pages,
+                    max_evidence_tokens=deps.max_evidence_tokens,
+                ),
+            )
+            outcome = await coordinator.collect(
+                state["decision"]["queries"], goal=deps.request.topic
+            )
+            limitations = outcome.limitations()
+            for source in outcome.sources.values():
+                excerpts_for_source = [
+                    excerpt
+                    for excerpt in outcome.excerpts.values()
+                    if excerpt["source_id"] == source["id"]
+                ]
+                sources[source["id"]] = source
                 if deps.hooks and deps.hooks.on_source:
-                    await deps.hooks.on_source(sources[source.id], excerpts[excerpt.id])
-        return {"sources": sources, "excerpts": excerpts}
+                    for excerpt in excerpts_for_source:
+                        await deps.hooks.on_source(source, excerpt)
+            excerpts.update(outcome.excerpts)
+        if deps.hooks and deps.hooks.on_research:
+            await deps.hooks.on_research(limitations, len(sources))
+        return {
+            "sources": sources,
+            "excerpts": excerpts,
+            "research_limitations": limitations,
+        }
 
     async def plan_node(state: GraphState) -> dict[str, Any]:
         result = await deps.call(
@@ -239,9 +258,22 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
         plan = ContentPlan.model_validate(result.data.model_dump(mode="json"))
         if plan.target_words != deps.request.target_words:
             raise GraphError("plan_target_mismatch")
-        known = set(state.get("excerpts", {}))
+        excerpts = state.get("excerpts", {})
+        known = set(excerpts)
         if any(evidence_id not in known for task in plan.tasks for evidence_id in task.evidence_ids):
             raise GraphError("plan_unknown_evidence")
+        # The planner may omit evidence IDs. Bind each section deterministically
+        # to the most relevant stored excerpts instead of exposing the whole
+        # research pack or inventing citations.
+        mapped = []
+        for task in plan.tasks:
+            if not task.evidence_ids and excerpts:
+                task = task.model_copy(
+                    update={"evidence_ids": relevant_evidence_ids(task.goal, excerpts, limit=3)}
+                )
+            mapped.append(task)
+        if tuple(mapped) != plan.tasks:
+            plan = plan.model_copy(update={"tasks": tuple(mapped)})
         data = plan.model_dump(mode="json")
         if deps.hooks and deps.hooks.on_plan:
             await deps.hooks.on_plan(data)
@@ -295,7 +327,21 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
         words = len(re.findall(r"\b[\w'-]+\b", raw))
         if words < int(plan.target_words * 0.8) or words > int(plan.target_words * 1.2):
             issues.append(ReviewIssue(code="word_budget_deviation", severity="error", explanation="The assembled article differs from its target word budget by more than twenty percent."))
-        return {"assembled_markdown": raw, "deterministic_issues": [issue.model_dump(mode="json") for issue in issues]}
+        claim_records: list[dict[str, Any]] = []
+        if state["decision"]["need_research"]:
+            assessments = extract_claim_assessments(
+                raw, state.get("sources", {}), state.get("excerpts", {})
+            )
+            claim_records = [claim.as_record() for claim in assessments]
+            issues.extend(
+                ReviewIssue.model_validate(issue)
+                for issue in unsupported_claim_issues(assessments)
+            )
+        return {
+            "assembled_markdown": raw,
+            "deterministic_issues": [issue.model_dump(mode="json") for issue in issues],
+            "claims": claim_records,
+        }
 
     async def review_node(state: GraphState) -> dict[str, Any]:
         revision = state.get("revision", 0)
@@ -349,6 +395,11 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
             # responsible for sanitizing even a needs-review artifact.
             markdown = raw
         status = state["review_status"]
+        if status == "approved" and any(
+            claim["assessment"] in {"unsupported", "conflicting"}
+            for claim in state.get("claims", [])
+        ):
+            raise GraphError("unsupported_claim_cannot_approve")
         if state.get("fixture_calls", 0):
             markdown = "> Synthetic development draft. No live model or web research was used.\n\n" + markdown
         elif not state["decision"]["need_research"]:

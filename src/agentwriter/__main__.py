@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from agentwriter.logging_config import configure_logging
 from agentwriter.runtime import run_async
 from agentwriter.settings import Settings
 
@@ -16,6 +17,8 @@ def main():
     commands.add_parser("serve", help="Start the loopback API and browser workspace")
     worker = commands.add_parser("worker", help="Process durable queued runs")
     worker.add_argument("--once", action="store_true", help="Process at most one currently due job")
+    retention = commands.add_parser("retention", help="Purge expired events, sources, sessions and old terminal runs")
+    retention.add_argument("--batch-size", type=int, default=100)
     demo = commands.add_parser("demo", help="Write a synthetic transient fixture draft without a database")
     demo.add_argument("--topic", default="A practical guide to building a writing habit")
     demo.add_argument("--output", type=Path, default=Path(".local/demo.md"))
@@ -26,6 +29,7 @@ def main():
             if args.env_file
             else Settings()
         )
+        configure_logging(settings)
         if args.command == "settings":
             print(json.dumps(settings.sanitized_summary(), indent=2))
         elif args.command == "serve":
@@ -41,6 +45,45 @@ def main():
             from agentwriter.worker.runner import serve_worker
 
             run_async(serve_worker(settings, once=args.once))
+        elif args.command == "retention":
+            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+            from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+            from agentwriter.storage.pool import database_pool
+            from agentwriter.storage.repository import Repository
+
+            if settings.database_url is None:
+                parser.error("Set DATABASE_URL before running retention.")
+            dsn = settings.database_url.get_secret_value()
+
+            async def purge():
+                async with database_pool(
+                    dsn,
+                    max_size=settings.database_pool_max_size,
+                    timeout=settings.database_pool_timeout,
+                ) as pool:
+                    repository = Repository(
+                        pool, dsn, graph_version=settings.graph_version
+                    )
+                    async with pool.connection() as connection:
+                        saver = AsyncPostgresSaver(
+                            connection,
+                            serde=JsonPlusSerializer(
+                                pickle_fallback=False,
+                                allowed_msgpack_modules=None,
+                                allowed_json_modules=None,
+                            ),
+                        )
+                        return await repository.purge_expired(
+                            event_retention_days=settings.event_retention_days,
+                            source_retention_days=settings.source_retention_days,
+                            run_retention_days=settings.run_retention_days,
+                            deleted_grace_hours=settings.deleted_run_grace_hours,
+                            batch_size=args.batch_size,
+                            delete_checkpoint=saver.adelete_thread,
+                        )
+
+            print(json.dumps(run_async(purge()), sort_keys=True))
         else:
             from langgraph.checkpoint.memory import InMemorySaver
 

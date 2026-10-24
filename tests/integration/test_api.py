@@ -142,18 +142,43 @@ async def test_create_observe_worker_article_edit_download_and_delete(
     assert rejected.status_code == 403 and rejected.json()["code"] == "origin_rejected"
     del client.headers["Origin"]
 
-    # Simulate a second authenticated principal at the identity boundary.
+    # Simulate a second authenticated principal at the identity boundary. Local
+    # development identity is loopback-only, so a second owner needs a new
+    # persisted session rather than a forged cookie.
     original_owner = app.state.settings.local_owner_id
+    original_cookies = dict(client.cookies)
+    original_csrf = client.headers["X-CSRF-Token"]
     app.state.settings.local_owner_id = "another-local-user"
+    second = await client.post("/api/v1/session")
+    assert second.status_code == 200
+    client.headers["X-CSRF-Token"] = second.json()["csrf_token"]
     try:
-        hidden = await client.get(f"/api/v1/runs/{run_id}")
-        assert hidden.status_code == 404
-        hidden_download = await client.get(
-            f"/api/v1/runs/{run_id}/revisions/{article['id']}/download"
+        hidden_paths = [
+            f"/api/v1/runs/{run_id}",
+            f"/api/v1/runs/{run_id}/sources",
+            f"/api/v1/runs/{run_id}/article",
+            f"/api/v1/runs/{run_id}/revisions",
+            f"/api/v1/runs/{run_id}/revisions/{article['id']}/download",
+            f"/api/v1/runs/{run_id}/events",
+        ]
+        for path in hidden_paths:
+            hidden = await client.get(path)
+            assert hidden.status_code == 404, (path, hidden.status_code, hidden.text)
+        hidden_edit = await client.post(
+            f"/api/v1/runs/{run_id}/revisions",
+            json={"parent_revision": article["id"], "markdown": "# Not mine"},
         )
-        assert hidden_download.status_code == 404
+        assert hidden_edit.status_code == 404
+        hidden_cancel = await client.post(f"/api/v1/runs/{run_id}/cancel")
+        assert hidden_cancel.status_code == 404
+        hidden_delete = await client.delete(f"/api/v1/runs/{run_id}")
+        assert hidden_delete.status_code == 404
+        assert (await client.get("/api/v1/runs")).json()["runs"] == []
     finally:
         app.state.settings.local_owner_id = original_owner
+        client.cookies.clear()
+        client.cookies.update(original_cookies)
+        client.headers["X-CSRF-Token"] = original_csrf
 
     deleted = await client.delete(f"/api/v1/runs/{run_id}")
     assert deleted.status_code == 204

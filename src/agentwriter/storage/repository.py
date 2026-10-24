@@ -7,6 +7,7 @@ it must not reconnect or be returned to a connection pool.
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -142,6 +143,88 @@ class Repository:
             )
         ).fetchone()
 
+    async def create_session(
+        self, owner: str, token_hash: str, csrf_hash: str, ttl_hours: int
+    ) -> None:
+        """Persist one opaque browser session; only hashes are stored."""
+        if not owner or len(owner) > 255:
+            raise StorageError("invalid_principal", "Invalid authenticated principal", 401)
+        if not re.fullmatch(r"[a-f0-9]{64}", token_hash) or not re.fullmatch(
+            r"[a-f0-9]{64}", csrf_hash
+        ):
+            raise ValueError("Session hashes must be SHA-256 hex digests")
+        if not 1 <= ttl_hours <= 168:
+            raise ValueError("Invalid session lifetime")
+        async with self.pool.connection() as connection, connection.transaction():
+            await connection.execute(
+                "INSERT INTO users(id) VALUES (%s) ON CONFLICT DO NOTHING", (owner,)
+            )
+            await connection.execute(
+                "INSERT INTO sessions(token_hash,owner_id,csrf_hash,expires_at) "
+                "VALUES (%s,%s,%s,clock_timestamp()+(%s*interval '1 hour'))",
+                (token_hash, owner, csrf_hash, ttl_hours),
+            )
+            # Bounded opportunistic cleanup; explicit retention remains a job.
+            await connection.execute(
+                "DELETE FROM sessions WHERE ctid IN (SELECT ctid FROM sessions "
+                "WHERE expires_at<=clock_timestamp() OR "
+                "(revoked_at IS NOT NULL AND revoked_at<clock_timestamp()-interval '1 day') "
+                "LIMIT 100)"
+            )
+
+    async def get_session(self, token_hash: str) -> dict | None:
+        """Return a live session by token hash; never returns the raw token."""
+        if not re.fullmatch(r"[a-f0-9]{64}", token_hash):
+            return None
+        async with self.pool.connection() as connection:
+            row = await (
+                await connection.execute(
+                    "SELECT owner_id,csrf_hash,expires_at FROM sessions "
+                    "WHERE token_hash=%s AND revoked_at IS NULL "
+                    "AND expires_at>clock_timestamp()",
+                    (token_hash,),
+                )
+            ).fetchone()
+            return _public(row) if row else None
+
+    async def set_session_csrf(self, token_hash: str, csrf_hash: str) -> bool:
+        """Rotate the CSRF digest after a process key change or explicit refresh."""
+        if not re.fullmatch(r"[a-f0-9]{64}", csrf_hash):
+            raise ValueError("Invalid CSRF digest")
+        async with self.pool.connection() as connection:
+            result = await connection.execute(
+                "UPDATE sessions SET csrf_hash=%s WHERE token_hash=%s "
+                "AND revoked_at IS NULL AND expires_at>clock_timestamp()",
+                (csrf_hash, token_hash),
+            )
+            return result.rowcount == 1
+
+    async def revoke_session(self, token_hash: str) -> bool:
+        async with self.pool.connection() as connection:
+            result = await connection.execute(
+                "UPDATE sessions SET revoked_at=clock_timestamp() "
+                "WHERE token_hash=%s AND revoked_at IS NULL",
+                (token_hash,),
+            )
+            return result.rowcount == 1
+
+    async def revoke_owner_sessions(self, owner: str) -> int:
+        async with self.pool.connection() as connection:
+            result = await connection.execute(
+                "UPDATE sessions SET revoked_at=clock_timestamp() "
+                "WHERE owner_id=%s AND revoked_at IS NULL",
+                (owner,),
+            )
+            return result.rowcount
+
+    async def prune_sessions(self) -> int:
+        async with self.pool.connection() as connection:
+            result = await connection.execute(
+                "DELETE FROM sessions WHERE expires_at<=clock_timestamp() "
+                "OR (revoked_at IS NOT NULL AND revoked_at<clock_timestamp()-interval '1 day')"
+            )
+            return result.rowcount
+
     async def create_run(self, owner: str, request: dict, idempotency_key: str) -> dict:
         if not 1 <= len(idempotency_key) <= 200 or not idempotency_key.isascii():
             raise StorageError(
@@ -219,6 +302,35 @@ class Repository:
     async def get_run(self, owner: str, run_id: str) -> dict:
         async with self.pool.connection() as connection:
             return _public(await self._owned(connection, owner, run_id))
+
+    async def get_run_internal(self, run_id: str) -> dict:
+        """Worker-only run lookup; callers must already own the execution fence."""
+        async with self.pool.connection() as connection:
+            row = await (
+                await connection.execute("SELECT * FROM runs WHERE id=%s", (_uuid(run_id),))
+            ).fetchone()
+            if row is None:
+                raise StorageError("not_found", "Run not found", 404)
+            return _public(row)
+
+    async def run_progress(self, owner: str, run_id: str) -> dict:
+        """Committed progress for the authoritative status endpoint."""
+        async with self.pool.connection() as connection:
+            await self._owned(connection, owner, run_id)
+            row = await (
+                await connection.execute(
+                    "SELECT (SELECT count(*) FROM section_drafts s WHERE s.run_id=r.id) AS sections,"
+                    "(SELECT count(DISTINCT s.task_id) FROM section_drafts s WHERE s.run_id=r.id) AS tasks,"
+                    "(SELECT count(*) FROM sources s WHERE s.run_id=r.id) AS sources,"
+                    "(SELECT count(*) FROM evidence_excerpts e WHERE e.run_id=r.id) AS excerpts,"
+                    "(SELECT count(*) FROM claim_citations c JOIN article_revisions a ON a.id=c.revision_id "
+                    " WHERE a.run_id=r.id AND c.assessment->>'assessment' IN ('unsupported','conflicting')) AS unsupported_claims "
+                    "FROM runs r WHERE r.id=%s",
+                    (_uuid(run_id),),
+                )
+            ).fetchone()
+            assert row is not None
+            return dict(row)
 
     async def list_runs(
         self, owner: str, *, limit: int = 20, before: str | None = None
@@ -325,7 +437,15 @@ class Repository:
             ).fetchone()
             if row is None:
                 raise StorageError("article_not_found", "No article revision is available", 404)
-            return _public(row)
+            claims = await (
+                await connection.execute(
+                    "SELECT claim_id,assessment FROM claim_citations WHERE revision_id=%s ORDER BY claim_id",
+                    (selected,),
+                )
+            ).fetchall()
+            result = _public(row)
+            result["claims"] = [dict(item["assessment"], claim_id=item["claim_id"]) for item in claims]
+            return result
 
     async def list_revisions(self, owner: str, run_id: str, *, limit: int = 50) -> list[dict]:
         if not 1 <= limit <= 100:
@@ -511,7 +631,7 @@ class Repository:
                 lease = await (
                     await connection.execute(
                         "UPDATE jobs SET lease_owner=%s,lease_expires_at=clock_timestamp()+(%s*interval '1 second'),"
-                        "generation=generation+1,attempt=attempt+1 WHERE run_id=%s RETURNING generation",
+                        "generation=generation+1,attempt=attempt+1,last_error=NULL WHERE run_id=%s RETURNING generation",
                         (worker_id, lease_seconds, run_id),
                     )
                 ).fetchone()
@@ -571,6 +691,33 @@ class Repository:
                 )
             return len(rows)
 
+    async def activate_due_retries(self, *, limit: int = 100) -> int:
+        """Make due retry waits runnable without claiming them in the scheduler."""
+        if not 1 <= limit <= 1000:
+            raise ValueError("Invalid activation batch")
+        async with self.pool.connection() as connection, connection.transaction():
+            rows = await (
+                await connection.execute(
+                    "SELECT r.id,j.generation FROM runs r JOIN jobs j ON j.run_id=r.id "
+                    "WHERE r.state='retry_wait' AND j.due_at<=clock_timestamp() "
+                    "ORDER BY j.due_at LIMIT %s FOR UPDATE OF r SKIP LOCKED",
+                    (limit,),
+                )
+            ).fetchall()
+            for row in rows:
+                await connection.execute(
+                    "UPDATE runs SET state='queued',updated_at=clock_timestamp() WHERE id=%s",
+                    (row["id"],),
+                )
+                await self._event(
+                    connection,
+                    row["id"],
+                    "queued",
+                    {"state": "queued", "resumed": True},
+                    f"retry_ready:{row['generation']}",
+                )
+            return len(rows)
+
     async def heartbeat(self, claim: Claim) -> bool:
         async with self.pool.connection() as connection, connection.transaction():
             try:
@@ -588,13 +735,205 @@ class Repository:
         async with self.pool.connection() as connection, connection.transaction():
             await self._fence(connection, claim)
 
-    async def worker_heartbeat(self, worker_id: str, *, draining: bool = False) -> None:
+    async def worker_heartbeat(
+        self,
+        worker_id: str,
+        *,
+        draining: bool = False,
+        active_run_id: str | None = None,
+        active_count: int = 0,
+    ) -> None:
+        if not 0 <= active_count <= 64:
+            raise ValueError("Invalid active worker count")
         async with self.pool.connection() as connection:
             await connection.execute(
-                "INSERT INTO worker_heartbeats(id,graph_version,draining) VALUES (%s,%s,%s) "
-                "ON CONFLICT(id) DO UPDATE SET graph_version=EXCLUDED.graph_version,draining=EXCLUDED.draining,last_seen=clock_timestamp()",
-                (worker_id, self.graph_version, draining),
+                "INSERT INTO worker_heartbeats(id,graph_version,draining,active_run_id,active_count) "
+                "VALUES (%s,%s,%s,%s,%s) "
+                "ON CONFLICT(id) DO UPDATE SET graph_version=EXCLUDED.graph_version,"
+                "draining=EXCLUDED.draining,active_run_id=EXCLUDED.active_run_id,"
+                "active_count=EXCLUDED.active_count,last_seen=clock_timestamp()",
+                (
+                    worker_id,
+                    self.graph_version,
+                    draining,
+                    _uuid(active_run_id) if active_run_id else None,
+                    active_count,
+                ),
             )
+
+    async def workers(self, *, stale_seconds: int = 60) -> list[dict]:
+        """Registry view including idle, active, draining and dead instances."""
+        if not 5 <= stale_seconds <= 3600:
+            raise ValueError("Invalid worker freshness bound")
+        async with self.pool.connection() as connection:
+            rows = await (
+                await connection.execute(
+                    "SELECT id,graph_version,draining,active_run_id,active_count,started_at,last_seen,"
+                    "last_seen>clock_timestamp()-(%s*interval '1 second') AS alive,"
+                    "extract(epoch from clock_timestamp()-last_seen) AS age_seconds "
+                    "FROM worker_heartbeats ORDER BY last_seen DESC",
+                    (stale_seconds,),
+                )
+            ).fetchall()
+            return _public(rows)
+
+    async def dead_workers(self, *, stale_seconds: int = 60) -> list[dict]:
+        return [row for row in await self.workers(stale_seconds=stale_seconds) if not row["alive"]]
+
+    async def metrics(self, *, stale_seconds: int = 60) -> dict[str, Any]:
+        """Bounded aggregate metrics; no run/worker identifiers become labels."""
+        if not 5 <= stale_seconds <= 3600:
+            raise ValueError("Invalid worker freshness bound")
+        async with self.pool.connection() as connection:
+            states = {
+                row["state"]: row["count"]
+                for row in await (
+                    await connection.execute(
+                        "SELECT state,count(*) AS count FROM runs WHERE deleted_at IS NULL GROUP BY state"
+                    )
+                ).fetchall()
+            }
+            queue = await (
+                await connection.execute(
+                    "SELECT count(*) FILTER (WHERE state IN ('queued','retry_wait')) AS waiting,"
+                    "count(*) FILTER (WHERE state='running') AS running,"
+                    "count(*) FILTER (WHERE state='cancel_requested') AS cancelling,"
+                    "coalesce(max(extract(epoch from clock_timestamp()-accepted_at)) "
+                    "FILTER (WHERE state IN ('queued','retry_wait')),0) AS oldest_wait_seconds,"
+                    "count(*) FILTER (WHERE deadline_at<=clock_timestamp() AND state IN "
+                    "('queued','retry_wait','running','cancel_requested')) AS overdue "
+                    "FROM runs WHERE deleted_at IS NULL"
+                )
+            ).fetchone()
+            workers = await (
+                await connection.execute(
+                    "SELECT count(*) FILTER (WHERE last_seen>clock_timestamp()-(%s*interval '1 second') "
+                    "AND NOT draining) AS alive,"
+                    "count(*) FILTER (WHERE last_seen>clock_timestamp()-(%s*interval '1 second') "
+                    "AND draining) AS draining,"
+                    "count(*) FILTER (WHERE last_seen<=clock_timestamp()-(%s*interval '1 second')) AS dead,"
+                    "coalesce(sum(active_count),0) AS active_runs "
+                    "FROM worker_heartbeats",
+                    (stale_seconds, stale_seconds, stale_seconds),
+                )
+            ).fetchone()
+            calls = {
+                row["status"]: row["count"]
+                for row in await (
+                    await connection.execute(
+                        "SELECT status,count(*) AS count FROM provider_calls "
+                        "WHERE created_at>clock_timestamp()-interval '24 hours' GROUP BY status"
+                    )
+                ).fetchall()
+            }
+            spend = await (
+                await connection.execute(
+                    "SELECT coalesce(sum(coalesce(actual_usd,amount_usd)),0) AS reserved_or_known,"
+                    "coalesce(sum(coalesce(actual_usd,amount_usd)) FILTER (WHERE actual_usd IS NULL),0) AS unknown,"
+                    "count(*) FILTER (WHERE actual_usd IS NULL) AS unknown_count "
+                    "FROM budget_reservations WHERE created_at>=date_trunc('day',clock_timestamp() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'"
+                )
+            ).fetchone()
+            events = await (
+                await connection.execute(
+                    "SELECT count(*) AS total FROM run_events WHERE created_at>clock_timestamp()-interval '24 hours'"
+                )
+            ).fetchone()
+            assert queue is not None and workers is not None and spend is not None and events is not None
+            return {
+                "states": states,
+                "queue": dict(queue),
+                "workers": dict(workers),
+                "provider_calls_24h": calls,
+                "spend_today": {
+                    "reserved_or_known_usd": str(spend["reserved_or_known"]),
+                    "unknown_usd": str(spend["unknown"]),
+                    "unknown_count": spend["unknown_count"],
+                },
+                "events_24h": events["total"],
+            }
+
+    async def purge_expired(
+        self,
+        *,
+        event_retention_days: int,
+        source_retention_days: int,
+        run_retention_days: int,
+        deleted_grace_hours: int,
+        batch_size: int = 100,
+        delete_checkpoint: Any = None,
+    ) -> dict[str, int]:
+        """Bounded retention. Active ownership is never touched."""
+        for value, low, high in (
+            (event_retention_days, 1, 365),
+            (source_retention_days, 1, 365),
+            (run_retention_days, 1, 365),
+            (deleted_grace_hours, 1, 720),
+            (batch_size, 1, 1000),
+        ):
+            if not low <= value <= high:
+                raise ValueError("Invalid retention bound")
+        removed = {"events": 0, "sources": 0, "deleted_runs": 0, "retained_runs": 0, "keys": 0}
+        async with self.pool.connection() as connection, connection.transaction():
+            result = await connection.execute(
+                "DELETE FROM run_events WHERE ctid IN (SELECT ctid FROM run_events "
+                "WHERE created_at<clock_timestamp()-(%s*interval '1 day') LIMIT %s)",
+                (event_retention_days, batch_size),
+            )
+            removed["events"] = result.rowcount
+            old_sources = await (
+                await connection.execute(
+                    "SELECT r.id FROM runs r WHERE r.state=ANY(%s) AND r.updated_at<"
+                    "clock_timestamp()-(%s*interval '1 day') AND EXISTS "
+                    "(SELECT 1 FROM sources s WHERE s.run_id=r.id) "
+                    "ORDER BY r.updated_at LIMIT %s FOR UPDATE SKIP LOCKED",
+                    (list(TERMINAL_STATES), source_retention_days, batch_size),
+                )
+            ).fetchall()
+            for row in old_sources:
+                deleted = await connection.execute(
+                    "DELETE FROM sources WHERE run_id=%s", (row["id"],)
+                )
+                removed["sources"] += deleted.rowcount
+            expired_keys = await connection.execute(
+                "DELETE FROM idempotency_keys WHERE expires_at<=clock_timestamp() "
+                "AND run_id IN (SELECT id FROM runs WHERE state=ANY(%s))",
+                (list(TERMINAL_STATES),),
+            )
+            removed["keys"] = expired_keys.rowcount
+        for kind, cutoff, count_key in (
+            ("deleted", f"clock_timestamp()-({deleted_grace_hours}*interval '1 hour')", "deleted_runs"),
+            ("retained", f"clock_timestamp()-({run_retention_days}*interval '1 day')", "retained_runs"),
+        ):
+            candidates = await self._retention_candidates(kind, cutoff, batch_size)
+            for run_id in candidates:
+                if delete_checkpoint is not None:
+                    await delete_checkpoint(run_id)
+                async with self.pool.connection() as connection, connection.transaction():
+                    await connection.execute(
+                        "DELETE FROM idempotency_keys WHERE run_id=%s", (_uuid(run_id),)
+                    )
+                    result = await connection.execute(
+                        "DELETE FROM runs WHERE id=%s AND state=ANY(%s) "
+                        + ("AND deleted_at IS NOT NULL" if kind == "deleted" else ""),
+                        (_uuid(run_id), list(TERMINAL_STATES)),
+                    )
+                    removed[count_key] += result.rowcount
+        return removed
+
+    async def _retention_candidates(self, kind: str, cutoff: str, limit: int) -> list[str]:
+        if kind not in {"deleted", "retained"}:
+            raise ValueError("Invalid retention candidate class")
+        condition = "deleted_at IS NOT NULL AND deleted_at<" if kind == "deleted" else "deleted_at IS NULL AND updated_at<"
+        async with self.pool.connection() as connection:
+            rows = await (
+                await connection.execute(
+                    f"SELECT id FROM runs WHERE state=ANY(%s) AND {condition}{cutoff} "
+                    "ORDER BY updated_at LIMIT %s",
+                    (list(TERMINAL_STATES), limit),
+                )
+            ).fetchall()
+            return [str(row["id"]) for row in rows]
 
     async def ready(self, *, require_worker: bool = True, freshness_seconds: int = 60) -> bool:
         async with self.pool.connection() as connection:
@@ -643,6 +982,50 @@ class Repository:
                 "INSERT INTO plans(run_id,revision,plan) VALUES (%s,%s,%s)",
                 (_uuid(claim.run_id), revision, Jsonb(plan)),
             )
+            await self._event(
+                connection,
+                claim.run_id,
+                "plan_ready",
+                {"revision": revision, "tasks": len(plan.get("tasks", []))},
+                f"plan:{revision}",
+            )
+
+    async def save_policy(self, claim: Claim, policy: dict) -> None:
+        """Persist the effective deterministic research decision."""
+        async with self.pool.connection() as connection, connection.transaction():
+            await self._fence(connection, claim)
+            await connection.execute(
+                "UPDATE runs SET policy=%s,updated_at=clock_timestamp() WHERE id=%s",
+                (Jsonb(policy), _uuid(claim.run_id)),
+            )
+            await self._event(
+                connection,
+                claim.run_id,
+                "policy_ready",
+                {
+                    "effective_mode": str(policy.get("effective_mode", ""))[:20],
+                    "reason": str(policy.get("reason", ""))[:240],
+                    "need_research": bool(policy.get("need_research")),
+                },
+                "policy",
+            )
+
+    async def save_research(self, claim: Claim, limitations: list[str], source_count: int) -> None:
+        """Persist material research limitations before drafting begins."""
+        bounded = [str(item)[:500] for item in limitations][:20]
+        async with self.pool.connection() as connection, connection.transaction():
+            await self._fence(connection, claim)
+            await connection.execute(
+                "UPDATE runs SET research_limitations=%s,updated_at=clock_timestamp() WHERE id=%s",
+                (Jsonb(bounded), _uuid(claim.run_id)),
+            )
+            await self._event(
+                connection,
+                claim.run_id,
+                "research_completed",
+                {"source_count": source_count, "limitation_count": len(bounded)},
+                "research",
+            )
 
     async def save_sources(
         self, claim: Claim, sources: list[dict], excerpts: list[dict] | None = None
@@ -668,6 +1051,13 @@ class Repository:
                     await connection.execute(
                         "INSERT INTO sources(run_id,source_id,source_data) VALUES (%s,%s,%s)",
                         (_uuid(claim.run_id), source_id, Jsonb(source)),
+                    )
+                    await self._event(
+                        connection,
+                        claim.run_id,
+                        "source_added",
+                        {"source_id": source_id, "provider": str(source.get("provider", ""))[:80]},
+                        f"source:{source_id}",
                     )
             for excerpt in excerpts or []:
                 existing = await (
@@ -735,11 +1125,15 @@ class Repository:
         review_status: str = "needs_review",
         issues: list[dict] | None = None,
         citation_map: dict | None = None,
+        claims: list[dict] | None = None,
+        event_type: str = "completed",
+        error_code: str | None = None,
     ) -> dict:
         if (
             review_status not in {"approved", "needs_review", "failed"}
             or not markdown.strip()
             or len(markdown) > 200000
+            or event_type not in {"completed", "failed"}
         ):
             raise StorageError("invalid_article", "Invalid article output", 422)
         state = {"approved": "succeeded", "needs_review": "needs_review", "failed": "failed"}[
@@ -763,15 +1157,38 @@ class Repository:
                     ),
                 )
             ).fetchone()
+            article_hash = markdown_hash(markdown)
             await connection.execute(
-                "UPDATE runs SET state=%s,current_revision=%s,updated_at=clock_timestamp() WHERE id=%s",
-                (state, revision_id, _uuid(claim.run_id)),
+                "UPDATE runs SET state=%s,current_revision=%s,error_code=%s,"
+                "error_message=CASE WHEN %s::text IS NULL THEN error_message ELSE "
+                "'This draft could not finish. Review the partial artifact and start again.' END,"
+                "updated_at=clock_timestamp() WHERE id=%s",
+                (state, revision_id, error_code, error_code, _uuid(claim.run_id)),
             )
+            for index, claim_row in enumerate(claims or [], start=1):
+                locator = str(claim_row.get("claim_locator") or "")[:500]
+                enriched = {
+                    **claim_row,
+                    "claim_locator": locator,
+                    "article_revision_id": str(revision_id),
+                    "article_hash": article_hash,
+                    "assessor": str(claim_row.get("assessor") or "lexical-v1")[:240],
+                    "assessor_version": str(claim_row.get("assessor_version") or "1")[:240],
+                }
+                await connection.execute(
+                    "INSERT INTO claim_citations(revision_id,claim_id,assessment) VALUES (%s,%s,%s)",
+                    (revision_id, f"claim_{index}", Jsonb(enriched)),
+                )
             await self._event(
                 connection,
                 claim.run_id,
-                "completed",
-                {"state": state, "revision_id": str(revision_id), "review_status": review_status},
+                event_type,
+                {
+                    "state": state,
+                    "revision_id": str(revision_id),
+                    "review_status": review_status,
+                    **({"code": error_code} if error_code else {}),
+                },
                 "terminal",
             )
             await connection.execute(
@@ -792,6 +1209,9 @@ class Repository:
                 "UPDATE runs SET state=%s,error_code=%s,error_message=%s,updated_at=clock_timestamp() WHERE id=%s",
                 (state, code, message, _uuid(claim.run_id)),
             )
+            await connection.execute(
+                "UPDATE jobs SET last_error=%s WHERE run_id=%s", (code, _uuid(claim.run_id))
+            )
             await self._event(
                 connection, claim.run_id, state, {"state": state, "code": code}, "terminal"
             )
@@ -810,8 +1230,9 @@ class Repository:
                 (code, _uuid(claim.run_id)),
             )
             await connection.execute(
-                "UPDATE jobs SET due_at=clock_timestamp()+(%s*interval '1 second'),lease_owner=NULL,lease_expires_at=NULL WHERE run_id=%s",
-                (delay_seconds, _uuid(claim.run_id)),
+                "UPDATE jobs SET due_at=clock_timestamp()+(%s*interval '1 second'),lease_owner=NULL,"
+                "lease_expires_at=NULL,last_error=%s WHERE run_id=%s",
+                (delay_seconds, code, _uuid(claim.run_id)),
             )
             await self._event(
                 connection,

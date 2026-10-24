@@ -3,6 +3,8 @@
 from agentwriter.providers.base import ModelGateway, ModelResult, ProviderError
 from agentwriter.providers.fixture import FixtureGateway, FixtureResearchGateway
 from agentwriter.providers.openrouter import OpenRouterGateway
+from agentwriter.providers.tavily import TavilyResearchGateway
+from agentwriter.providers.treg import TregResearchGateway
 
 __all__ = [
     "FixtureGateway",
@@ -11,4 +13,6 @@ __all__ = [
     "ModelResult",
     "OpenRouterGateway",
     "ProviderError",
+    "TavilyResearchGateway",
+    "TregResearchGateway",
 ]

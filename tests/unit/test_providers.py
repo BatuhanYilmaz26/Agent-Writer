@@ -223,5 +223,111 @@ async def test_fixture_research_is_deterministic_and_empty_corpus_stays_empty():
     assert result == await gateway.extract("https://example.com/article")
     assert result["fixture"] is True and "Synthetic fixture" in result["source"]["title"]
     assert len(result["source"]["content_hash"]) == 64
-    with pytest.raises(ProviderError, match="research_provider_not_qualified"):
-        await TregResearchGateway().search("topic")
+
+
+@pytest.mark.asyncio
+async def test_treg_free_only_route_cap_and_no_hidden_paid_waterfall():
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(ValueError, match="zero spend cap"):
+            TregResearchGateway(client, "token", routing_policy="free_only", max_cost_micro=1)
+        with pytest.raises(ValueError, match="positive spend cap"):
+            TregResearchGateway(client, "token", routing_policy="budgeted", max_cost_micro=0)
+        gateway = TregResearchGateway(client, "test-token", org="org-1")
+        headers = gateway._headers()
+        assert headers["X-Treg-Route-Max-Cost"] == "0"
+        assert headers["X-Treg-Route-Waterfall"] == "0"
+        assert headers["X-Treg-Org"] == "org-1"
+
+
+@pytest.mark.asyncio
+async def test_treg_search_and_extract_normalize_evidence_with_zero_charge():
+    requests: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.url.path.endswith("tinyfish.web.search"):
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "url": "https://example.org/article",
+                            "title": " Example article ",
+                            "snippet": " Example snippet ",
+                        }
+                    ]
+                },
+                headers={
+                    "x-treg-cost-micro": "0",
+                    "x-treg-routed-tool": "treg.web.search",
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "title": "Fetched title",
+                        "text": "Fetched evidence text.",
+                        "final_url": "https://example.org/article",
+                        "published_date": "2024-01-02",
+                    }
+                ],
+                "errors": [],
+            },
+            headers={"x-treg-cost-micro": "0", "x-treg-routed-tool": "treg.web.extract"},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        gateway = TregResearchGateway(client, "test-token", qualify_dns=False)
+        found = await gateway.search("example query", max_results=1)
+        assert found == [
+            {
+                "url": "https://example.org/article",
+                "title": "Example article",
+                "snippet": "Example snippet",
+                "provider": "treg/tinyfish",
+                "published_at": None,
+            }
+        ]
+        assert gateway.last_charge_micro == 0
+        extracted = await gateway.extract("https://example.org/article")
+        assert extracted["source"]["content_hash"] == extracted["excerpt"]["content_hash"]
+        assert extracted["source"]["published_at"].startswith("2024-01-02")
+        assert extracted["cost_micro_usd"] == 0
+        assert extracted["fixture"] is False
+    assert requests[0].headers["X-Treg-Token"] == "test-token"
+    assert requests[0].headers["X-Treg-Route-Max-Cost"] == "0"
+    assert requests[0].headers["X-Treg-Route-Waterfall"] == "0"
+
+
+@pytest.mark.asyncio
+async def test_treg_rejects_paid_charge_unknown_billing_and_unsafe_urls():
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200, json={"results": []}, headers={"x-treg-cost-micro": "5"}
+            )
+        )
+    ) as client:
+        gateway = TregResearchGateway(client, "token", qualify_dns=False)
+        with pytest.raises(ProviderError, match="research_cost_policy_violation"):
+            await gateway.search("query")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"results": []}))
+    ) as client:
+        gateway = TregResearchGateway(client, "token", qualify_dns=False)
+        with pytest.raises(ProviderError, match="research_billing_unknown"):
+            await gateway.search("query")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(400, json={"error": {"code": "INVALID_INPUT"}})
+        )
+    ) as client:
+        gateway = TregResearchGateway(client, "token", qualify_dns=False)
+        with pytest.raises(ProviderError, match="research_request_rejected"):
+            await gateway.search("query")
+        with pytest.raises(ValueError):
+            await gateway.extract("http://127.0.0.1/private")

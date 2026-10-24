@@ -7,6 +7,7 @@ reading an unrelated working-directory file in workers or tests.
 from __future__ import annotations
 
 import ipaddress
+import re
 from decimal import Decimal
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -46,6 +47,7 @@ class Settings(BaseSettings):
     openrouter_base_url: Literal["https://openrouter.ai/api/v1"] = "https://openrouter.ai/api/v1"
     model_policy: Literal["free_only", "budgeted"] = "free_only"
     model_allowlist: tuple[str, ...] = ("openrouter/free",)
+    openrouter_provider_allowlist: tuple[str, ...] = ()
     provider_data_collection: Literal["deny", "allow"] = "deny"
     provider_require_parameters: bool = True
     treg_token: SecretStr | None = Field(default=None, repr=False)
@@ -61,6 +63,10 @@ class Settings(BaseSettings):
     model_max_concurrency: Annotated[int, Field(ge=1, le=16)] = 3
     provider_rpm: Annotated[int, Field(ge=1)] = 1
     provider_tpm: Annotated[int, Field(ge=1)] = 16_000
+    user_daily_calls: Annotated[int, Field(ge=1, le=10_000)] = 100
+    provider_circuit_failures: Annotated[int, Field(ge=1, le=20)] = 3
+    provider_circuit_seconds: Annotated[int, Field(ge=1, le=600)] = 30
+    graph_version: str = "v1"
     max_user_nonterminal_runs: Annotated[int, Field(ge=1, le=20)] = 2
     max_global_nonterminal_runs: Annotated[int, Field(ge=1, le=10_000)] = 100
     max_request_bytes: Annotated[int, Field(ge=1024, le=32_768)] = 32_768
@@ -84,7 +90,31 @@ class Settings(BaseSettings):
     event_retention_days: Annotated[int, Field(ge=1, le=365)] = 7
     run_retention_days: Annotated[int, Field(ge=1, le=365)] = 30
     source_retention_days: Annotated[int, Field(ge=1, le=365)] = 7
+    deleted_run_grace_hours: Annotated[int, Field(ge=1, le=720)] = 24
+    retention_batch_size: Annotated[int, Field(ge=1, le=1000)] = 100
     langgraph_strict_msgpack: bool = True
+
+    worker_concurrency: Annotated[int, Field(ge=1, le=8)] = 1
+    worker_drain_seconds: Annotated[int, Field(ge=1, le=120)] = 20
+    scheduler_poll_seconds: Annotated[float, Field(gt=0, le=60)] = 2.0
+    session_ttl_hours: Annotated[int, Field(ge=1, le=168)] = 8
+    sse_heartbeat_seconds: Annotated[int, Field(ge=1, le=60)] = 15
+    sse_poll_seconds: Annotated[float, Field(ge=0.1, le=5)] = 0.5
+    max_observers_per_user: Annotated[int, Field(ge=1, le=20)] = 4
+    metrics_token: SecretStr | None = Field(default=None, repr=False)
+    log_format: Literal["json", "text"] = "text"
+
+    model_max_input_tokens: Annotated[int, Field(ge=1024, le=128_000)] = 6_000
+    model_max_output_tokens: Annotated[int, Field(ge=256, le=8192)] = 8192
+    openrouter_input_price_per_million: Annotated[
+        Decimal, Field(ge=0, max_digits=12, decimal_places=6)
+    ] = Decimal("0")
+    openrouter_output_price_per_million: Annotated[
+        Decimal, Field(ge=0, max_digits=12, decimal_places=6)
+    ] = Decimal("0")
+    openrouter_schema_repairs: Annotated[int, Field(ge=0, le=1)] = 1
+    treg_max_cost_micro: Annotated[int, Field(ge=0, le=1_000_000)] = 0
+    research_max_chars_per_page: Annotated[int, Field(ge=1000, le=20_000)] = 20_000
 
     @field_validator("bind_host")
     @classmethod
@@ -92,6 +122,14 @@ class Settings(BaseSettings):
         value = value.strip()
         if not value or any(char in value for char in "/\\?#@\r\n"):
             raise ValueError("BIND_HOST must be a host/IP, not a URL")
+        return value
+
+    @field_validator("graph_version")
+    @classmethod
+    def safe_graph_version(cls, value: str) -> str:
+        value = value.strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", value):
+            raise ValueError("GRAPH_VERSION must be a short safe identifier")
         return value
 
     @field_validator("database_url", "migration_database_url")
@@ -130,6 +168,10 @@ class Settings(BaseSettings):
             raise ValueError("JOB_HEARTBEAT_SECONDS must be less than half JOB_LEASE_SECONDS")
         if self.database_pool_min_size > self.database_pool_max_size:
             raise ValueError("Database pool minimum exceeds maximum")
+        if self.database_pool_max_size < self.worker_concurrency + 1:
+            raise ValueError("Database pool must reserve a connection for each worker plus the API")
+        if self.model_max_output_tokens > self.provider_tpm:
+            raise ValueError("Model output limit cannot exceed the shared per-minute token budget")
         if self.max_user_nonterminal_runs > self.max_global_nonterminal_runs:
             raise ValueError("Per-user admission cannot exceed global admission")
         if self.source_retention_days > self.run_retention_days or self.event_retention_days > self.run_retention_days:
@@ -177,18 +219,32 @@ class Settings(BaseSettings):
             raise ValueError("OPENROUTER_MODEL must occur in MODEL_ALLOWLIST")
         if self.model_policy == "free_only" and self.openrouter_model != "openrouter/free" and not self.openrouter_model.endswith(":free"):
             raise ValueError("Free-only policy forbids paid model IDs")
+        if self.model_policy == "free_only" and (
+            self.openrouter_input_price_per_million != 0
+            or self.openrouter_output_price_per_million != 0
+        ):
+            raise ValueError("Free-only policy cannot carry a paid price snapshot")
         if self.model_policy == "budgeted" and (
             self.run_budget_usd <= 0 or self.user_daily_budget_usd <= 0
         ):
             raise ValueError("Budgeted model policy needs positive run and daily budgets")
+        if self.model_policy == "budgeted" and (
+            self.openrouter_input_price_per_million <= 0
+            and self.openrouter_output_price_per_million <= 0
+        ):
+            raise ValueError("Budgeted model policy needs an explicit qualified price snapshot")
+        if self.model_policy == "budgeted" and not self.openrouter_provider_allowlist:
+            raise ValueError("Budgeted model policy needs an explicit provider allowlist")
 
         if self.research_provider == "treg":
             if not self.enable_external_calls or not self.treg_qualified or self.treg_token is None:
                 raise ValueError("Treg requires ENABLE_EXTERNAL_CALLS, qualification and TREG_TOKEN")
             if self.treg_routing_policy == "budgeted" and (
-                not self.treg_max_cost or self.run_budget_usd <= 0 or self.user_daily_budget_usd <= 0
+                self.treg_max_cost_micro <= 0 or self.run_budget_usd <= 0 or self.user_daily_budget_usd <= 0
             ):
-                raise ValueError("Paid Treg routing needs a qualified maximum cost and positive budgets")
+                raise ValueError("Paid Treg routing needs a positive maximum cost and budgets")
+            if self.treg_routing_policy == "free_only" and self.treg_max_cost_micro != 0:
+                raise ValueError("Free-only Treg routing requires a zero route cost cap")
         if self.research_provider == "tavily" and (
             not self.enable_external_calls or not self.tavily_qualified or self.tavily_api_key is None
         ):
@@ -210,5 +266,9 @@ class Settings(BaseSettings):
             "max_run_seconds": self.max_run_seconds,
             "max_model_calls": self.max_model_calls,
             "max_review_rounds": self.max_review_rounds,
+            "worker_concurrency": self.worker_concurrency,
+            "worker_drain_seconds": self.worker_drain_seconds,
+            "session_ttl_hours": self.session_ttl_hours,
+            "log_format": self.log_format,
             "restricted_checkpoint_types": self.langgraph_strict_msgpack,
         }

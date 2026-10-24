@@ -82,6 +82,55 @@ async def test_atomic_enqueue_idempotency_and_all_nonterminal_admission(database
 
 
 @pytest.mark.asyncio
+async def test_idempotency_tombstone_expires_without_regenerating_inside_ttl(database):
+    repository, _ = database
+    request = {"topic": "A creative story"}
+    run = await repository.create_run("alice", request, "expiring-key")
+    await repository.delete_run("alice", run["id"])
+    with pytest.raises(StorageError) as retained:
+        await repository.create_run("alice", request, "expiring-key")
+    assert retained.value.status_code == 410
+    async with repository.pool.connection() as connection:
+        await connection.execute(
+            "UPDATE idempotency_keys SET expires_at=clock_timestamp()-interval '1 second' "
+            "WHERE owner_id='alice' AND key='expiring-key'"
+        )
+    replacement = await repository.create_run("alice", request, "expiring-key")
+    assert replacement["id"] != run["id"]
+    assert replacement["state"] == "queued"
+
+
+@pytest.mark.asyncio
+async def test_two_repository_pools_never_double_claim(database):
+    repository, url = database
+    run = await repository.create_run("alice", {"topic": "A creative story"}, "two-pool-key")
+    async with database_pool(url, migrations_directory=MIGRATIONS) as second_pool:
+        second = Repository(second_pool, url)
+        claims = await asyncio.gather(
+            repository.claim_job("worker-one"), second.claim_job("worker-two")
+        )
+        acquired = [claim for claim in claims if claim is not None]
+        assert len(acquired) == 1
+        claim = acquired[0]
+        try:
+            assert claim.run_id == run["id"]
+        finally:
+            await claim.close()
+
+
+@pytest.mark.asyncio
+async def test_graph_version_mismatch_fails_closed(database):
+    repository, url = database
+    run = await repository.create_run("alice", {"topic": "A creative story"}, "version-key")
+    async with database_pool(url, migrations_directory=MIGRATIONS) as second_pool:
+        incompatible = Repository(second_pool, url, graph_version="v2")
+        assert await incompatible.claim_job("version-worker") is None
+    failed = await repository.get_run("alice", run["id"])
+    assert failed["state"] == "failed"
+    assert failed["error_code"] == "graph_version_mismatch"
+
+
+@pytest.mark.asyncio
 async def test_deleted_run_cannot_be_read_or_regenerated_with_retained_key(database):
     repository, _ = database
     request = {"topic": "A creative story"}
@@ -123,6 +172,80 @@ async def test_claims_exclude_overlap_and_expired_writer_cannot_publish(database
         assert len(await repository.get_sections(run["id"])) == 1
     finally:
         await second.close()
+
+
+@pytest.mark.asyncio
+async def test_event_sequence_is_gap_free_under_delayed_commits_and_replay_deduplicates(database):
+    repository, _ = database
+    run = await repository.create_run("alice", {"topic": "A creative story"}, "event-key")
+    first_inserted = asyncio.Event()
+    release_first = asyncio.Event()
+    second_committed = asyncio.Event()
+
+    async def first_writer():
+        async with repository.pool.connection() as connection:
+            async with connection.transaction():
+                await repository._event(connection, run["id"], "first", {"n": 1}, "first")
+                first_inserted.set()
+                await release_first.wait()
+
+    async def second_writer():
+        await first_inserted.wait()
+        async with repository.pool.connection() as connection:
+            async with connection.transaction():
+                await repository._event(connection, run["id"], "second", {"n": 2}, "second")
+        second_committed.set()
+
+    first = asyncio.create_task(first_writer())
+    second = asyncio.create_task(second_writer())
+    try:
+        await asyncio.wait_for(first_inserted.wait(), timeout=5)
+        await asyncio.sleep(0.2)
+        # The uncommitted first event owns the run row lock, so the second
+        # writer cannot allocate a later sequence and hide it from replay.
+        assert not second_committed.is_set()
+        release_first.set()
+        await asyncio.wait_for(first, timeout=5)
+        await asyncio.wait_for(second, timeout=5)
+    finally:
+        release_first.set()
+        for task in (first, second):
+            if not task.done():
+                task.cancel()
+                with pytest.raises(asyncio.CancelledError):
+                    await task
+
+    events = await repository.list_events("alice", run["id"])
+    assert [event["sequence"] for event in events] == [1, 2, 3]
+    assert [event["event_type"] for event in events] == ["queued", "first", "second"]
+    async with repository.pool.connection() as connection:
+        async with connection.transaction():
+            duplicate = await repository._event(
+                connection, run["id"], "first", {"n": 1}, "first"
+            )
+    assert duplicate["sequence"] == 2
+    assert len(await repository.list_events("alice", run["id"])) == 3
+
+
+@pytest.mark.asyncio
+async def test_expired_event_cursor_requires_status_resync(database):
+    repository, _ = database
+    run = await repository.create_run("alice", {"topic": "A creative story"}, "expired-key")
+    claim = await repository.claim_job("expiry-worker")
+    assert claim is not None
+    try:
+        await repository.finalize(claim, "# Draft\n\nText.", review_status="needs_review")
+    finally:
+        await claim.close()
+    async with repository.pool.connection() as connection:
+        await connection.execute(
+            "DELETE FROM run_events WHERE run_id=%s AND sequence<3", (run["id"],)
+        )
+    with pytest.raises(StorageError) as expired:
+        await repository.list_events("alice", run["id"], after=1)
+    assert expired.value.code == "expired_cursor"
+    assert expired.value.status_code == 410
+    assert await repository.list_events("alice", run["id"], after=3) == []
 
 
 @pytest.mark.asyncio
@@ -312,6 +435,40 @@ async def test_pool_exhaustion_is_bounded_and_schema_failure_closes_sessions(dat
             )
         ).fetchone()
         assert row["count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_retention_purges_only_old_terminal_runs_and_expired_sessions(database):
+    repository, _ = database
+    old = await repository.create_run("alice", {"topic": "Old article"}, "old-run")
+    claim = await repository.claim_job("retention-worker")
+    assert claim is not None
+    await repository.finalize(claim, "# Old\n\nRetained until retention.", review_status="needs_review")
+    await claim.close()
+    active = await repository.create_run("alice", {"topic": "Active article"}, "active-run")
+    async with repository.pool.connection() as connection:
+        await connection.execute(
+            "UPDATE runs SET updated_at=clock_timestamp()-interval '40 days' WHERE id=%s",
+            (old["id"],),
+        )
+        await connection.execute(
+            "INSERT INTO sessions(token_hash,owner_id,csrf_hash,expires_at) "
+            "VALUES (%s,'alice',%s,clock_timestamp()-interval '1 hour')",
+            ("a" * 64, "b" * 64),
+        )
+    removed = await repository.purge_expired(
+        event_retention_days=7,
+        source_retention_days=7,
+        run_retention_days=30,
+        deleted_grace_hours=24,
+        batch_size=10,
+    )
+    assert removed["retained_runs"] == 1
+    with pytest.raises(StorageError) as gone:
+        await repository.get_run("alice", old["id"])
+    assert gone.value.status_code == 404
+    assert (await repository.get_run("alice", active["id"]))["state"] == "queued"
+    assert await repository.prune_sessions() == 1
 
 
 @pytest.mark.asyncio
