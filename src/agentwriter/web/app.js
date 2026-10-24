@@ -1,92 +1,929 @@
-// The preview creates DOM nodes with textContent. Untrusted Markdown is never HTML.
-const $ = id => document.getElementById(id);
-let csrf = '', active = null, article = null, stream = null, poll = null, nextCursor = null;
-let ledger = new Map();
-const terminal = new Set(['succeeded', 'needs_review', 'failed', 'cancelled']);
-const labels = {queued:'Queued',running:'Writing',retry_wait:'Waiting to retry',cancel_requested:'Cancelling',succeeded:'Generated',needs_review:'Needs review',failed:'Could not finish',cancelled:'Cancelled'};
+// AgentWriter browser client.
+// Security boundary: untrusted Markdown is rendered with DOM text nodes only.
+// Raw HTML, images, remote assets and authored links are never inserted.
+
+const $ = (id) => document.getElementById(id);
+const TERMINAL = new Set(["succeeded", "needs_review", "failed", "cancelled"]);
+const STATE_LABELS = {
+  queued: "Queued",
+  running: "Writing",
+  retry_wait: "Waiting to retry",
+  cancel_requested: "Cancelling",
+  succeeded: "Generated",
+  needs_review: "Needs review",
+  failed: "Could not finish",
+  cancelled: "Cancelled",
+};
+const EVENT_NAMES = [
+  "queued", "running", "policy_ready", "research_completed", "source_added",
+  "plan_ready", "section_completed", "review_completed", "retry_wait",
+  "cancel_requested", "article_edited", "completed", "failed", "cancelled",
+];
+const EVENT_LABELS = {
+  queued: "Queued",
+  running: "Writing",
+  policy_ready: "Research decision recorded",
+  research_completed: "Research complete",
+  source_added: "Source recorded",
+  plan_ready: "Plan ready",
+  section_completed: "Section drafted",
+  review_completed: "Review complete",
+  retry_wait: "Waiting to retry",
+  cancel_requested: "Cancelling",
+  article_edited: "Revision saved",
+  completed: "Draft complete",
+  failed: "Draft stopped",
+  cancelled: "Cancelled",
+};
+
+const state = {
+  csrf: "",
+  activeRun: null,
+  run: null,
+  article: null,
+  revisions: [],
+  ledger: new Map(),
+  stream: null,
+  reconnectTimer: null,
+  reconnectAttempts: 0,
+  pollTimer: null,
+  refreshTimer: null,
+  lastEventId: 0,
+  nextCursor: null,
+  pendingKey: null,
+  pendingPayload: null,
+  editorDirty: false,
+  conflictText: null,
+  loadingArticle: false,
+};
+
+class ApiError extends Error {
+  constructor(message, status, code, correlationId, details) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.correlationId = correlationId;
+    this.details = details;
+  }
+}
+
+function announce(message) {
+  const live = $("live");
+  live.textContent = "";
+  window.setTimeout(() => { live.textContent = message; }, 20);
+}
+
+function setConnection(text, tone = "") {
+  const connection = $("connection");
+  connection.textContent = text;
+  if (tone) connection.dataset.tone = tone;
+  else delete connection.dataset.tone;
+}
+
+function clearError() {
+  const error = $("error");
+  error.hidden = true;
+  error.textContent = "";
+}
+
+function showError(error) {
+  const message = error instanceof ApiError
+    ? error.message
+    : "The service could not be reached. Your saved work is safe; try again.";
+  const reference = error instanceof ApiError && error.correlationId
+    ? ` Reference: ${error.correlationId}.`
+    : "";
+  const box = $("error");
+  box.textContent = `${message}${reference}`;
+  box.hidden = false;
+  box.focus();
+  announce(message);
+}
+
+function humanMessage(status, payload) {
+  if (payload && typeof payload.message === "string" && payload.message.trim()) {
+    return payload.message.trim();
+  }
+  if (status === 401) return "Your session expired. Reload the page to start a new local session.";
+  if (status === 403) return "Reload the page before trying this action.";
+  if (status === 404) return "That draft is no longer available.";
+  if (status === 410) return "This draft was deleted. Start a new one.";
+  if (status === 413) return "The brief is too large. Shorten it and try again.";
+  if (status === 429) return "You have reached the current run limit. Wait for a draft to finish or delete one.";
+  if (status === 503) return "The service is temporarily unavailable. Your saved work is safe.";
+  return "The request could not be completed. Check the highlighted fields.";
+}
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {...options, headers:{'Content-Type':'application/json', 'X-CSRF-Token':csrf, ...(options.headers || {})}});
+  const method = options.method || "GET";
+  const headers = { Accept: "application/json", ...(options.headers || {}) };
+  if (state.csrf && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+    headers["X-CSRF-Token"] = state.csrf;
+  }
+  const init = { method, headers, credentials: "same-origin", signal: options.signal };
+  if (options.body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    init.body = JSON.stringify(options.body);
+  }
+  const response = await fetch(path, init);
   if (!response.ok) {
-    const error = await response.json().catch(() => ({message:'The service could not be reached.'}));
-    throw new Error(error.message || 'Please try again.');
+    const payload = await response.json().catch(() => ({}));
+    const detail = Array.isArray(payload.details) && payload.details.length
+      ? ` ${payload.details.map((item) => item.message || item.type).filter(Boolean).join("; ")}`
+      : "";
+    throw new ApiError(
+      humanMessage(response.status, payload) + detail,
+      response.status,
+      payload.code,
+      payload.correlation_id,
+      payload.details,
+    );
   }
   return response.status === 204 ? null : response.json();
 }
-function showError(error) { $('error').textContent = error.message || String(error); $('error').hidden = false; }
-function clearError() { $('error').hidden = true; }
-function stopObserving() { stream?.close(); stream=null; clearInterval(poll); poll=null; }
 
-function inline(node, text) {
-  for (const part of text.split(/(\[@[A-Za-z][A-Za-z0-9_.:-]{0,79}\])/g)) {
+function safeExternalUrl(value) {
+  try {
+    const url = new URL(value, window.location.origin);
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    if (url.username || url.password) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function appendInline(node, text) {
+  for (const part of String(text).split(/(\[@[A-Za-z][A-Za-z0-9_.:-]{0,79}\])/g)) {
     const match = part.match(/^\[@(.+)\]$/);
-    const source = match && ledger.get(match[1]);
+    const source = match ? state.ledger.get(match[1]) : null;
     if (source) {
-      const link = document.createElement('a');
-      const url = new URL(source.url);
-      if (!['http:','https:'].includes(url.protocol)) { node.append(document.createTextNode(part)); continue; }
-      link.href = url.href; link.textContent = `[${source.title}]`; link.target='_blank';link.rel='noopener noreferrer';node.append(link);
-    } else node.append(document.createTextNode(part));
+      const href = safeExternalUrl(source.url);
+      if (!href) {
+        node.append(document.createTextNode(part));
+        continue;
+      }
+      const link = document.createElement("a");
+      link.href = href;
+      link.textContent = `[${source.title || source.url}]`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      node.append(link);
+    } else {
+      node.append(document.createTextNode(part));
+    }
   }
 }
+
+// A deliberately small Markdown renderer. It never interprets HTML and never
+// creates links except validated source citations from the stored ledger.
 export function renderMarkdown(root, text) {
-  root.replaceChildren(); let code = null;
-  for (const line of text.split('\n')) {
-    if (line.startsWith('```')) { if (code) {code=null;} else {const pre=document.createElement('pre');code=document.createElement('code');pre.append(code);root.append(pre);} continue; }
-    if (code) {code.append(document.createTextNode(line+'\n'));continue;}
-    if (!line.trim()) continue;
-    const heading=line.match(/^(#{1,6})\s+(.*)$/), bullet=line.match(/^[-*]\s+(.*)$/);
-    const element=document.createElement(heading ? `h${heading[1].length}` : bullet ? 'p' : 'p');
-    inline(element,heading ? heading[2] : bullet ? `• ${bullet[1]}` : line);root.append(element);
+  root.replaceChildren();
+  const lines = String(text).replace(/\r\n/g, "\n").split("\n");
+  let index = 0;
+  let paragraph = null;
+  let list = null;
+  let listTag = null;
+  let code = null;
+  let codeLines = [];
+
+  const flushParagraph = () => {
+    if (paragraph) {
+      root.append(paragraph);
+      paragraph = null;
+    }
+  };
+  const flushList = () => {
+    if (list) {
+      root.append(list);
+      list = null;
+      listTag = null;
+    }
+  };
+
+  while (index < lines.length) {
+    const line = lines[index];
+    if (line.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      if (code) {
+        const pre = document.createElement("pre");
+        const codeNode = document.createElement("code");
+        codeNode.append(document.createTextNode(codeLines.join("\n")));
+        pre.append(codeNode);
+        root.append(pre);
+        code = null;
+        codeLines = [];
+      } else {
+        code = true;
+      }
+      index += 1;
+      continue;
+    }
+    if (code) {
+      codeLines.push(line);
+      index += 1;
+      continue;
+    }
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      index += 1;
+      continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const element = document.createElement(`h${heading[1].length}`);
+      appendInline(element, heading[2]);
+      root.append(element);
+      index += 1;
+      continue;
+    }
+    const quote = line.match(/^>\s?(.*)$/);
+    if (quote) {
+      flushParagraph();
+      flushList();
+      const blockquote = document.createElement("blockquote");
+      const p = document.createElement("p");
+      appendInline(p, quote[1]);
+      blockquote.append(p);
+      root.append(blockquote);
+      index += 1;
+      continue;
+    }
+    const bullet = line.match(/^\s*[-*]\s+(.*)$/);
+    const ordered = line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (bullet || ordered) {
+      flushParagraph();
+      const tag = bullet ? "ul" : "ol";
+      if (!list || listTag !== tag) {
+        flushList();
+        list = document.createElement(tag);
+        listTag = tag;
+      }
+      const item = document.createElement("li");
+      appendInline(item, (bullet || ordered)[1]);
+      list.append(item);
+      index += 1;
+      continue;
+    }
+    if (/^\s*---+\s*$/.test(line)) {
+      flushParagraph();
+      flushList();
+      root.append(document.createElement("hr"));
+      index += 1;
+      continue;
+    }
+    if (!paragraph) paragraph = document.createElement("p");
+    else paragraph.append(document.createElement("br"));
+    appendInline(paragraph, line);
+    index += 1;
+  }
+  flushParagraph();
+  flushList();
+  if (code) {
+    const pre = document.createElement("pre");
+    const codeNode = document.createElement("code");
+    codeNode.append(document.createTextNode(codeLines.join("\n")));
+    pre.append(codeNode);
+    root.append(pre);
   }
 }
-async function refreshHistory(append=false) {
-  const data=await api('/api/v1/runs?limit=20'+(append&&nextCursor?'&before='+encodeURIComponent(nextCursor):''));
-  if (!append) $('history').replaceChildren();
-  if (!append && !data.runs.length) $('history').textContent='Your saved runs will appear here.';
-  for (const run of data.runs) {
-    const li=document.createElement('li'), button=document.createElement('button'), meta=document.createElement('small'), state=document.createElement('span');
-    button.type='button';button.textContent=run.request.topic;button.onclick=()=>selectRun(run.id).catch(showError);
-    meta.textContent=new Date(run.accepted_at).toLocaleString();button.append(meta);
-    state.className='label';state.textContent=labels[run.state] || run.state;li.append(button,state);$('history').append(li);
+
+function stopObserving() {
+  if (state.stream) {
+    state.stream.close();
+    state.stream = null;
   }
-  nextCursor=data.next_cursor;$('more').hidden=!nextCursor;
+  window.clearTimeout(state.reconnectTimer);
+  state.reconnectTimer = null;
+  window.clearInterval(state.pollTimer);
+  state.pollTimer = null;
+  window.clearTimeout(state.refreshTimer);
+  state.refreshTimer = null;
 }
-async function loadArticle() {
-  const [result,evidence,versions]=await Promise.all([api(`/api/v1/runs/${active}/article`),api(`/api/v1/runs/${active}/sources`),api(`/api/v1/runs/${active}/revisions`)]);
-  article=result;ledger=new Map(evidence.sources.map(source=>[source.id,source]));
-  const editable=result.citation_map?.editable_markdown || result.markdown;
-  $('editor').value=editable;renderMarkdown($('preview'),editable);$('article-view').hidden=false;
-  $('review-status').hidden=false;$('review-status').textContent=result.review_status==='approved'?'Generated revision passed its configured checks. Please review before publishing.':result.review_status==='unassessed'?'Your edited revision has not been assessed by a model.':'This draft needs your review. Check its evidence and limitations.';
-  $('issues').replaceChildren();for (const issue of result.issues || []) {const li=document.createElement('li');li.textContent=issue.explanation || issue.code;$('issues').append(li);}
-  $('sources').replaceChildren();for (const source of evidence.sources) {const li=document.createElement('li'), a=document.createElement('a'),note=document.createElement('small');a.href=source.url;a.textContent=source.title;a.target='_blank';a.rel='noopener noreferrer';note.textContent=`${source.provider} · retrieved ${source.retrieved_at}`;li.append(a,note);$('sources').append(li);}
-  if (!evidence.sources.length) $('sources').textContent='No external sources were used for this draft.';
-  $('revision').replaceChildren();for(const [index,version] of versions.revisions.entries()){const option=document.createElement('option');option.value=version.id;option.textContent=`${index===0?'Latest · ':''}${version.author_type==='human'?'Your edit':'Generated'} · ${version.review_status} · ${new Date(version.created_at).toLocaleString()}`;$('revision').append(option);}
-  $('revision').value=result.id;setDownload(result.id);
+
+function scheduleRefresh() {
+  if (state.refreshTimer) return;
+  state.refreshTimer = window.setTimeout(() => {
+    state.refreshTimer = null;
+    refreshRun().catch(showError);
+  }, 250);
 }
-function setDownload(id){$('download').href=`/api/v1/runs/${active}/revisions/${id}/download`;}
+
+function connectStream() {
+  if (!state.activeRun || !state.run || TERMINAL.has(state.run.state)) return;
+  if (state.stream) state.stream.close();
+  const cursor = state.lastEventId ? `?after=${encodeURIComponent(state.lastEventId)}` : "";
+  const stream = new EventSource(`/api/v1/runs/${state.activeRun}/events${cursor}`);
+  state.stream = stream;
+  stream.onopen = () => {
+    state.reconnectAttempts = 0;
+    setConnection("Live progress", "live");
+  };
+  stream.onerror = () => {
+    if (!state.activeRun || !state.run || TERMINAL.has(state.run.state)) {
+      stream.close();
+      return;
+    }
+    stream.close();
+    state.stream = null;
+    setConnection("Reconnecting…", "offline");
+    const delay = Math.min(10000, 1000 * (2 ** state.reconnectAttempts));
+    state.reconnectAttempts += 1;
+    state.reconnectTimer = window.setTimeout(() => {
+      refreshRun().then(() => connectStream()).catch(() => {
+        state.reconnectTimer = window.setTimeout(connectStream, 5000);
+      });
+    }, delay);
+  };
+  const onEvent = (event) => {
+    let payload = {};
+    try { payload = JSON.parse(event.data); } catch { payload = {}; }
+    const sequence = Number(event.lastEventId || payload.sequence || 0);
+    if (Number.isFinite(sequence) && sequence > state.lastEventId) state.lastEventId = sequence;
+    const label = EVENT_LABELS[event.type] || event.type.replaceAll("_", " ");
+    const progress = $("progress");
+    if (progress) progress.textContent = `${label} · ${formatProgress(state.run)}`;
+    announce(label);
+    scheduleRefresh();
+  };
+  for (const name of EVENT_NAMES) stream.addEventListener(name, onEvent);
+  stream.addEventListener("stream_error", () => {
+    stopObserving();
+    setConnection("Reloading progress…", "offline");
+    refreshRun().catch(showError);
+  });
+}
+
+function formatProgress(run) {
+  const progress = run && run.progress ? run.progress : {};
+  const parts = [];
+  if (Number.isInteger(progress.sections) && Number.isInteger(progress.tasks) && progress.tasks > 0) {
+    parts.push(`${progress.sections}/${progress.tasks} sections`);
+  }
+  if (Number.isInteger(progress.sources)) parts.push(`${progress.sources} sources`);
+  if (Number.isInteger(progress.unsupported_claims) && progress.unsupported_claims > 0) {
+    parts.push(`${progress.unsupported_claims} claims need attention`);
+  }
+  return parts.length ? parts.join(" · ") : "Waiting for the first durable update.";
+}
+
+function renderRun(run) {
+  state.run = run;
+  $("state").textContent = STATE_LABELS[run.state] || run.state;
+  $("progress").textContent = run.error_message || formatProgress(run);
+  $("cancel").hidden = TERMINAL.has(run.state);
+  $("cancel").disabled = run.state === "cancel_requested";
+  $("cancel").textContent = run.state === "cancel_requested" ? "Cancelling…" : "Cancel run";
+
+  const limitations = Array.isArray(run.research_limitations) ? run.research_limitations : [];
+  $("limitations-panel").hidden = limitations.length === 0;
+  const list = $("limitations");
+  list.replaceChildren();
+  for (const limitation of limitations) {
+    const item = document.createElement("li");
+    item.textContent = String(limitation);
+    list.append(item);
+  }
+
+  if (TERMINAL.has(run.state)) {
+    stopObserving();
+    setConnection("Saved", "live");
+    $("run-note").textContent = "This run is saved. Reopen it from Recent drafts at any time.";
+    if (run.current_revision) loadArticle().catch(showError);
+  } else {
+    $("run-note").textContent = "Your run continues even if you close this page. Reopen it from Recent drafts.";
+    if (!state.stream) connectStream();
+    if (!state.pollTimer) {
+      state.pollTimer = window.setInterval(() => {
+        refreshRun().catch(showError);
+      }, 5000);
+    }
+  }
+  announce(`${STATE_LABELS[run.state] || run.state}. ${formatProgress(run)}`);
+}
+
 async function refreshRun() {
-  if(!active)return;const run=await api(`/api/v1/runs/${active}`);$('state').textContent=labels[run.state]||run.state;
-  $('cancel').hidden=terminal.has(run.state);$('progress').textContent=run.error_message || (terminal.has(run.state)?'Run saved. You can return to it from history.':'Your run continues even if you close this page.');
-  if(terminal.has(run.state)){stopObserving();if(run.current_revision)await loadArticle();await refreshHistory();}
+  if (!state.activeRun) return null;
+  const run = await api(`/api/v1/runs/${state.activeRun}`);
+  renderRun(run);
   return run;
 }
-async function selectRun(id) {
-  stopObserving();clearError();active=id;article=null;localStorage.setItem('agentwriter.run',id);
-  $('empty').hidden=true;$('run-view').hidden=false;$('article-view').hidden=true;$('review-status').hidden=true;$('issues').replaceChildren();
-  const run=await refreshRun();if(!run||terminal.has(run.state))return;
-  let sequence=0;stream=new EventSource(`/api/v1/runs/${id}/events`);
-  const onEvent=event=>{const data=JSON.parse(event.data);if(data.sequence<=sequence)return;sequence=data.sequence;$('progress').textContent=event.type.replaceAll('_',' ');if(['completed','failed','cancelled'].includes(event.type))refreshRun().catch(showError);};
-  for(const name of ['queued','running','plan_completed','research_completed','source_added','section_completed','review_completed','retry_wait','cancel_requested','completed','failed','cancelled'])stream.addEventListener(name,onEvent);
-  stream.addEventListener('stream_error',()=>{stopObserving();refreshRun().catch(showError);});
-  poll=setInterval(()=>refreshRun().catch(showError),3000);
+
+async function refreshHistory(append = false) {
+  const before = append && state.nextCursor
+    ? `&before=${encodeURIComponent(state.nextCursor)}`
+    : "";
+  const data = await api(`/api/v1/runs?limit=20${before}`);
+  const history = $("history");
+  if (!append) history.replaceChildren();
+  if (!append && !data.runs.length) {
+    const empty = document.createElement("li");
+    empty.className = "help";
+    empty.textContent = "Your saved runs will appear here.";
+    history.append(empty);
+  }
+  for (const run of data.runs) {
+    const item = document.createElement("li");
+    if (run.id === state.activeRun) item.setAttribute("aria-current", "true");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = run.request.topic;
+    const meta = document.createElement("small");
+    meta.textContent = `${new Date(run.accepted_at).toLocaleString()} · ${STATE_LABELS[run.state] || run.state}`;
+    button.append(meta);
+    button.addEventListener("click", () => selectRun(run.id).catch(showError));
+    item.append(button);
+    history.append(item);
+  }
+  state.nextCursor = data.next_cursor;
+  $("more").hidden = !state.nextCursor;
 }
-$('brief-form').addEventListener('submit',async event=>{event.preventDefault();clearError();$('submit').disabled=true;try{const data=Object.fromEntries(new FormData(event.target));data.target_words=Number(data.target_words);data.language='en';const result=await api('/api/v1/runs',{method:'POST',headers:{'Idempotency-Key':crypto.randomUUID()},body:JSON.stringify(data)});await refreshHistory();await selectRun(result.id);}catch(error){showError(error);}finally{$('submit').disabled=false;}});
-$('cancel').onclick=async()=>{try{await api(`/api/v1/runs/${active}/cancel`,{method:'POST'});await refreshRun();}catch(error){showError(error);}};
-$('delete').onclick=async()=>{try{await api(`/api/v1/runs/${active}`,{method:'DELETE'});stopObserving();active=null;localStorage.removeItem('agentwriter.run');$('run-view').hidden=true;$('empty').hidden=false;$('state').textContent='No run selected';await refreshHistory();}catch(error){showError(error);}};
-function editing(enabled){$('editor').hidden=!enabled;$('editor-label').hidden=!enabled;$('preview').hidden=enabled;$('save').hidden=!enabled;$('preview-tab').setAttribute('aria-pressed',String(!enabled));$('edit-tab').setAttribute('aria-pressed',String(enabled));}
-$('preview-tab').onclick=()=>{renderMarkdown($('preview'),$('editor').value);editing(false);};$('edit-tab').onclick=()=>editing(true);
-$('save').onclick=async()=>{try{clearError();await api(`/api/v1/runs/${active}/revisions`,{method:'POST',body:JSON.stringify({parent_revision:article.id,markdown:$('editor').value})});await loadArticle();editing(false);}catch(error){showError(error);}};
-$('revision').onchange=()=>setDownload($('revision').value);$('refresh').onclick=()=>refreshHistory().catch(showError);$('more').onclick=()=>refreshHistory(true).catch(showError);
-async function start(){const session=await api('/api/v1/session');csrf=session.csrf_token;$('mode').textContent=session.fixture?'Local fixture profile':'Local profile';await refreshHistory();const saved=localStorage.getItem('agentwriter.run');if(saved)await selectRun(saved);}
-start().catch(showError);
+
+function renderReview(article) {
+  $("review-panel").hidden = false;
+  const status = $("review-status");
+  const messages = {
+    approved: "This generated revision passed its configured checks. Review the evidence before publishing.",
+    needs_review: "This draft needs your review. Check its evidence, limitations and claim support.",
+    failed: "Generation stopped before approval. A partial draft is retained for review only.",
+    unassessed: "This human-edited revision has not been assessed. Earlier approval does not carry over.",
+  };
+  status.textContent = messages[article.review_status] || messages.needs_review;
+  status.dataset.status = article.review_status || "needs_review";
+
+  const issues = $("issues");
+  issues.replaceChildren();
+  const findings = Array.isArray(article.issues) ? article.issues : [];
+  for (const issue of findings) {
+    const item = document.createElement("li");
+    item.dataset.severity = issue.severity || "info";
+    const code = document.createElement("strong");
+    code.textContent = String(issue.code || "review_finding").replaceAll("_", " ");
+    const explanation = document.createElement("p");
+    explanation.textContent = issue.explanation || "Review this finding.";
+    item.append(code, explanation);
+    if (issue.action) {
+      const action = document.createElement("small");
+      action.textContent = issue.action;
+      item.append(action);
+    }
+    issues.append(item);
+  }
+  if (!findings.length) {
+    const item = document.createElement("li");
+    item.className = "help";
+    item.textContent = "No editorial findings were recorded for this revision.";
+    issues.append(item);
+  }
+
+  const claims = $("claims");
+  claims.replaceChildren();
+  const assessments = Array.isArray(article.claims) ? article.claims : [];
+  for (const claim of assessments) {
+    const item = document.createElement("li");
+    item.dataset.assessment = claim.assessment || "unassessed";
+    const text = document.createElement("p");
+    text.className = "claim-text";
+    text.textContent = claim.claim_text || "Cited sentence";
+    const detail = document.createElement("small");
+    detail.textContent = `${claim.assessment || "unassessed"} · ${claim.reason || "no reason recorded"} · ${claim.claim_locator || "locator unavailable"}`;
+    item.append(text, detail);
+    if (Array.isArray(claim.excerpt_locators) && claim.excerpt_locators.length) {
+      const citations = document.createElement("p");
+      citations.className = "claim-citations";
+      citations.textContent = `Evidence: ${claim.excerpt_locators.join("; ")}`;
+      item.append(citations);
+    }
+    claims.append(item);
+  }
+  if (!assessments.length) {
+    const item = document.createElement("li");
+    item.className = "help";
+    item.textContent = "No cited factual sentences were assessed for this revision.";
+    claims.append(item);
+  }
+}
+
+function renderSources(sources) {
+  const list = $("sources");
+  list.replaceChildren();
+  for (const source of sources) {
+    const item = document.createElement("li");
+    const href = safeExternalUrl(source.url);
+    if (href) {
+      const link = document.createElement("a");
+      link.href = href;
+      link.textContent = source.title || href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      item.append(link);
+    } else {
+      const title = document.createElement("strong");
+      title.textContent = source.title || "Source";
+      item.append(title);
+    }
+    const meta = document.createElement("small");
+    meta.textContent = `${source.provider || "unknown"} · retrieved ${source.retrieved_at || "unknown"} · ${source.extraction_state || "stored"}`;
+    item.append(meta);
+    list.append(item);
+  }
+  if (!sources.length) {
+    const item = document.createElement("li");
+    item.className = "help";
+    item.textContent = "No external sources were used for this draft.";
+    list.append(item);
+  }
+}
+
+function setDownload(revisionId, contentHash) {
+  const link = $("download");
+  link.href = `/api/v1/runs/${state.activeRun}/revisions/${revisionId}/download`;
+  link.setAttribute("download", `agentwriter-${revisionId}.md`);
+  $("hash").textContent = contentHash ? `SHA-256 ${contentHash}` : "";
+}
+
+function setEditor(text) {
+  $("editor").value = text;
+  $("editor-count").textContent = `${text.length.toLocaleString()} characters · Markdown preserved exactly`;
+  state.editorDirty = false;
+}
+
+function updateEditingControls() {
+  const editing = !$("edit-panel").hidden;
+  const latest = state.revisions.length ? state.revisions[0].id : null;
+  const selected = state.article ? state.article.id : null;
+  $("save").hidden = !editing;
+  $("save").disabled = !editing || !selected || selected !== latest;
+  $("save").title = selected && latest && selected !== latest
+    ? "Select the latest revision before saving an edit."
+    : "";
+}
+
+function renderRevisionOptions() {
+  const select = $("revision");
+  select.replaceChildren();
+  for (const [index, revision] of state.revisions.entries()) {
+    const option = document.createElement("option");
+    option.value = revision.id;
+    option.textContent = `${index === 0 ? "Latest · " : ""}${revision.author_type === "human" ? "Your edit" : "Generated"} · ${revision.review_status} · ${new Date(revision.created_at).toLocaleString()}`;
+    select.append(option);
+  }
+  if (state.article) select.value = state.article.id;
+}
+
+function renderArticle() {
+  const article = state.article;
+  $("article-view").hidden = false;
+  const editable = article.citation_map && article.citation_map.editable_markdown
+    ? article.citation_map.editable_markdown
+    : article.markdown;
+  if (!state.editorDirty) setEditor(editable);
+  // Preview the immutable stored revision, including any synthetic/partial
+  // disclosure that must never be hidden by the editable body.
+  renderMarkdown($("preview"), article.markdown);
+  renderReview(article);
+  renderRevisionOptions();
+  setDownload(article.id, article.content_hash);
+  updateEditingControls();
+  $("conflict").hidden = state.conflictText === null;
+  if (state.conflictText !== null) $("conflict-message").textContent = state.conflictText;
+}
+
+async function loadArticle(revisionId = null) {
+  if (!state.activeRun || state.loadingArticle) return;
+  state.loadingArticle = true;
+  try {
+    const query = revisionId ? `?revision=${encodeURIComponent(revisionId)}` : "";
+    const [article, evidence, versions] = await Promise.all([
+      api(`/api/v1/runs/${state.activeRun}/article${query}`),
+      api(`/api/v1/runs/${state.activeRun}/sources?limit=100`),
+      api(`/api/v1/runs/${state.activeRun}/revisions`),
+    ]);
+    state.article = article;
+    state.revisions = versions.revisions || [];
+    state.ledger = new Map((evidence.sources || []).map((source) => [source.id, source]));
+    renderSources(evidence.sources || []);
+    renderArticle();
+    $("empty").hidden = true;
+    $("run-view").hidden = false;
+  } finally {
+    state.loadingArticle = false;
+  }
+}
+
+async function selectRun(id, options = {}) {
+  stopObserving();
+  clearError();
+  state.activeRun = id;
+  state.run = null;
+  state.article = null;
+  state.revisions = [];
+  state.ledger = new Map();
+  state.lastEventId = 0;
+  state.reconnectAttempts = 0;
+  state.editorDirty = false;
+  state.conflictText = null;
+  localStorage.setItem("agentwriter.run", id);
+  $("empty").hidden = true;
+  $("run-view").hidden = false;
+  $("article-view").hidden = true;
+  $("review-panel").hidden = true;
+  $("limitations-panel").hidden = true;
+  $("issues").replaceChildren();
+  $("claims").replaceChildren();
+  try {
+    const run = await refreshRun();
+    if (run && TERMINAL.has(run.state)) await loadArticle();
+    await refreshHistory();
+    if (!options.restore) $("draft-title").focus();
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      localStorage.removeItem("agentwriter.run");
+      state.activeRun = null;
+      $("run-view").hidden = true;
+      $("empty").hidden = false;
+      $("state").textContent = "No run selected";
+      announce("That draft is no longer available.");
+      return;
+    }
+    throw error;
+  }
+}
+
+function researchWarning() {
+  const topic = $("topic").value;
+  const instructions = $("instructions").value;
+  const mode = $("research_mode").value;
+  const sourceDependent = /\b(latest|current|currently|today|news|recent|price|pricing|cost|statistic|study|report|version|release|law|regulation|medical|financial|tax)\b|\d{4}|\d+%/i.test(`${topic} ${instructions}`);
+  const warning = $("research-warning");
+  if (mode === "off" && sourceDependent) {
+    warning.textContent = "This brief looks source-dependent. Choose Required or Automatic so the draft can cite evidence, or narrow it to a clearly creative topic.";
+    warning.hidden = false;
+    return false;
+  }
+  warning.hidden = true;
+  warning.textContent = "";
+  return true;
+}
+
+function buildBrief() {
+  return {
+    topic: $("topic").value.trim(),
+    audience: $("audience").value.trim(),
+    tone: $("tone").value,
+    language: "en",
+    target_words: Number($("target_words").value),
+    research_mode: $("research_mode").value,
+    instructions: $("instructions").value.trim(),
+  };
+}
+
+function payloadKey(payload) {
+  return JSON.stringify(payload);
+}
+
+async function submitBrief(event) {
+  event.preventDefault();
+  clearError();
+  const form = $("brief-form");
+  if (!form.reportValidity()) return;
+  if (!researchWarning()) {
+    $("research_mode").focus();
+    announce("Choose a research mode that fits this source-dependent brief.");
+    return;
+  }
+  const payload = buildBrief();
+  const signature = payloadKey(payload);
+  if (!state.pendingKey || state.pendingPayload !== signature) {
+    state.pendingKey = crypto.randomUUID();
+    state.pendingPayload = signature;
+  }
+  const button = $("submit");
+  button.disabled = true;
+  button.setAttribute("aria-busy", "true");
+  button.textContent = "Creating draft…";
+  try {
+    const result = await api("/api/v1/runs", {
+      method: "POST",
+      headers: { "Idempotency-Key": state.pendingKey },
+      body: payload,
+    });
+    state.pendingKey = null;
+    state.pendingPayload = null;
+    await refreshHistory();
+    await selectRun(result.id);
+    announce("Draft queued. Progress will appear here and stays available if you close the page.");
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 409 && error.code === "idempotency_conflict") {
+      state.pendingKey = null;
+      state.pendingPayload = null;
+    }
+    showError(error);
+  } finally {
+    button.disabled = false;
+    button.removeAttribute("aria-busy");
+    button.textContent = "Create draft ↗";
+  }
+}
+
+function editing(enabled) {
+  $("edit-panel").hidden = !enabled;
+  $("preview-panel").hidden = enabled;
+  $("preview-tab").setAttribute("aria-selected", String(!enabled));
+  $("edit-tab").setAttribute("aria-selected", String(enabled));
+  $("preview-tab").tabIndex = enabled ? -1 : 0;
+  $("edit-tab").tabIndex = enabled ? 0 : -1;
+  if (enabled) {
+    updateEditingControls();
+    $("editor").focus();
+  } else {
+    const previewText = state.editorDirty || !state.article
+      ? $("editor").value
+      : state.article.markdown;
+    renderMarkdown($("preview"), previewText);
+    $("preview-tab").focus();
+  }
+}
+
+async function saveEdit(parentRevision = null) {
+  clearError();
+  if (!state.article || !state.activeRun) return;
+  const parent = parentRevision || state.article.id;
+  const markdown = $("editor").value;
+  try {
+    const created = await api(`/api/v1/runs/${state.activeRun}/revisions`, {
+      method: "POST",
+      body: { parent_revision: parent, markdown },
+    });
+    state.conflictText = null;
+    state.editorDirty = false;
+    editing(false);
+    await loadArticle(created.id);
+    announce("New revision saved. Human edits remain unassessed.");
+    $("review-status").focus();
+  } catch (error) {
+    if (error instanceof ApiError && error.code === "revision_conflict") {
+      state.conflictText = "The article changed while you were editing. Your text is still here. Reload the latest draft, or save your text as a new revision on the latest draft.";
+      $("conflict").hidden = false;
+      $("conflict-message").textContent = state.conflictText;
+      $("conflict-save").focus();
+      announce("Edit conflict. Your text is preserved.");
+      return;
+    }
+    showError(error);
+  }
+}
+
+async function recoverOnLatest() {
+  clearError();
+  if (!state.activeRun) return;
+  try {
+    const latest = await api(`/api/v1/runs/${state.activeRun}/article`);
+    state.article = latest;
+    state.conflictText = null;
+    $("conflict").hidden = true;
+    await saveEdit(latest.id);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function copyEditorText() {
+  try {
+    await navigator.clipboard.writeText($("editor").value);
+    announce("Your text was copied to the clipboard.");
+  } catch {
+    $("editor").focus();
+    $("editor").select();
+    announce("Select and copy your text from the editor.");
+  }
+}
+
+async function cancelRun() {
+  if (!state.activeRun) return;
+  try {
+    await api(`/api/v1/runs/${state.activeRun}/cancel`, { method: "POST" });
+    await refreshRun();
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function deleteRun() {
+  if (!state.activeRun) return;
+  if (!window.confirm("Delete this draft and its stored revisions? This cannot be undone.")) return;
+  try {
+    await api(`/api/v1/runs/${state.activeRun}`, { method: "DELETE" });
+    stopObserving();
+    state.activeRun = null;
+    state.run = null;
+    state.article = null;
+    localStorage.removeItem("agentwriter.run");
+    $("run-view").hidden = true;
+    $("empty").hidden = false;
+    $("state").textContent = "No run selected";
+    await refreshHistory();
+    announce("Draft deleted.");
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function wireEvents() {
+  $("brief-form").addEventListener("submit", submitBrief);
+  $("topic").addEventListener("input", researchWarning);
+  $("instructions").addEventListener("input", researchWarning);
+  $("research_mode").addEventListener("change", researchWarning);
+  $("cancel").addEventListener("click", cancelRun);
+  $("delete").addEventListener("click", deleteRun);
+  $("refresh").addEventListener("click", () => refreshHistory().catch(showError));
+  $("more").addEventListener("click", () => refreshHistory(true).catch(showError));
+  $("preview-tab").addEventListener("click", () => editing(false));
+  $("edit-tab").addEventListener("click", () => editing(true));
+  const selectTab = (editingMode) => {
+    editing(editingMode);
+    $(editingMode ? "edit-tab" : "preview-tab").focus();
+  };
+  $("preview-tab").addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight" || event.key === "End") {
+      event.preventDefault();
+      selectTab(true);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      selectTab(false);
+    }
+  });
+  $("edit-tab").addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft" || event.key === "Home") {
+      event.preventDefault();
+      selectTab(false);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      selectTab(true);
+    }
+  });
+  $("editor").addEventListener("input", () => {
+    state.editorDirty = true;
+    $("editor-count").textContent = `${$("editor").value.length.toLocaleString()} characters · unsaved changes`;
+  });
+  $("save").addEventListener("click", () => saveEdit());
+  $("conflict-reload").addEventListener("click", () => {
+    state.conflictText = null;
+    $("conflict").hidden = true;
+    state.editorDirty = false;
+    loadArticle().catch(showError);
+  });
+  $("conflict-save").addEventListener("click", recoverOnLatest);
+  $("conflict-copy").addEventListener("click", copyEditorText);
+  $("revision").addEventListener("change", () => {
+    const selected = $("revision").value;
+    state.editorDirty = false;
+    loadArticle(selected).catch(showError);
+  });
+  window.addEventListener("online", () => {
+    setConnection("Online", "live");
+    refreshRun().then(() => connectStream()).catch(showError);
+  });
+  window.addEventListener("offline", () => {
+    setConnection("Offline — saved progress will refresh when you reconnect.", "offline");
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && state.activeRun) {
+      refreshRun().catch(showError);
+    }
+  });
+}
+
+async function start() {
+  wireEvents();
+  try {
+    let session;
+    try {
+      session = await api("/api/v1/session");
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        session = await api("/api/v1/session", { method: "POST" });
+      } else {
+        throw error;
+      }
+    }
+    state.csrf = session.csrf_token;
+    setConnection(session.fixture ? "Local fixture profile" : "Local profile", "live");
+    $("notice").textContent = session.fixture
+      ? "Local fixture profile: synthetic model and research fixtures. No live AI or web research is used."
+      : "Local profile. Check the configured provider and evidence labels before publishing.";
+    await refreshHistory();
+    const saved = localStorage.getItem("agentwriter.run");
+    if (saved) await selectRun(saved, { restore: true }).catch(showError);
+  } catch (error) {
+    setConnection("Service unavailable", "offline");
+    showError(error);
+  }
+}
+
+start();

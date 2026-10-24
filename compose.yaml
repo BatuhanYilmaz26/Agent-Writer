@@ -1,0 +1,108 @@
+name: agentwriter
+
+# Local, production-shaped Compose profile. It uses the explicit fixture
+# providers and loopback-only local authentication. Do not expose this profile
+# to an untrusted network. A hosted profile requires OIDC and qualified
+# providers, which are separate release gates.
+#
+# Set POSTGRES_PASSWORD in an ignored .env file before starting. The database
+# is not published to the host; only the loopback reverse proxy is.
+
+x-app: &app
+  build:
+    context: .
+  image: agentwriter:local
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-agentwriter}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-agentwriter}
+  APP_ENV: development
+  DEVELOPMENT_MODE: "true"
+  AUTH_MODE: local
+  ALLOWED_HOSTS: '["127.0.0.1","localhost"]'
+  MODEL_PROVIDER: fixture
+  RESEARCH_PROVIDER: fixture
+  ENABLE_EXTERNAL_CALLS: "false"
+  MODEL_POLICY: free_only
+  RUN_BUDGET_USD: "0"
+  USER_DAILY_BUDGET_USD: "0"
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentwriter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-agentwriter}
+    volumes:
+      # PostgreSQL 18 images use a major-version subdirectory below this mount.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    <<: *app
+    command: ["python", "-m", "agentwriter.storage.migrate", "--directory", "migrations"]
+    environment:
+      <<: *app-env
+      MIGRATION_DATABASE_URL: postgresql://${POSTGRES_USER:-agentwriter}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-agentwriter}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # Caddy owns the network namespace. The API binds only to loopback inside
+  # that namespace, so local authentication cannot be reached directly from
+  # the host or a container network.
+  proxy:
+    image: caddy:2-alpine
+    command: ["caddy", "reverse-proxy", "--from", ":8080", "--to", "127.0.0.1:8000"]
+    ports:
+      - "127.0.0.1:8000:8080"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    <<: *app
+    command: ["python", "-m", "agentwriter", "serve"]
+    network_mode: "service:proxy"
+    environment:
+      <<: *app-env
+      BIND_HOST: 127.0.0.1
+      PORT: "8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      proxy:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/live', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "agentwriter", "worker"]
+    environment:
+      <<: *app-env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  db-data:

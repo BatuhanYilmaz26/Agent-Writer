@@ -319,8 +319,10 @@ class Repository:
             await self._owned(connection, owner, run_id)
             row = await (
                 await connection.execute(
-                    "SELECT (SELECT count(*) FROM section_drafts s WHERE s.run_id=r.id) AS sections,"
-                    "(SELECT count(DISTINCT s.task_id) FROM section_drafts s WHERE s.run_id=r.id) AS tasks,"
+                    "SELECT (SELECT count(DISTINCT s.task_id) FROM section_drafts s "
+                    " WHERE s.run_id=r.id AND s.content->>'status'='accepted') AS sections,"
+                    "COALESCE((SELECT jsonb_array_length(p.plan->'tasks') FROM plans p "
+                    " WHERE p.run_id=r.id ORDER BY p.revision DESC LIMIT 1),0) AS tasks,"
                     "(SELECT count(*) FROM sources s WHERE s.run_id=r.id) AS sources,"
                     "(SELECT count(*) FROM evidence_excerpts e WHERE e.run_id=r.id) AS excerpts,"
                     "(SELECT count(*) FROM claim_citations c JOIN article_revisions a ON a.id=c.revision_id "

@@ -4,9 +4,13 @@ import asyncio
 
 
 def loop_factory(use_subprocess: bool = False):
-    """Uvicorn custom loop factory; avoid Windows Proactor/Psycopg incompatibility."""
+    """Uvicorn custom loop factory; avoid Windows Proactor/Psycopg incompatibility.
+
+    ``asyncio.Runner`` calls the supplied factory and expects a loop instance,
+    so return an instance rather than the event-loop class.
+    """
     del use_subprocess
-    return asyncio.SelectorEventLoop
+    return asyncio.SelectorEventLoop()
 
 
 def run_async(awaitable):

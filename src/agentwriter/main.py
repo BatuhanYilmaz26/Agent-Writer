@@ -242,8 +242,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"sources": await request.app.state.repository.sources(owner, run_id, limit=limit, offset=offset)}
 
     @app.get("/api/v1/runs/{run_id}/article")
-    async def article(run_id: str, request: Request, owner: str = Depends(authenticated)):
-        return await request.app.state.repository.get_article(owner, run_id)
+    async def article(
+        run_id: str,
+        request: Request,
+        owner: str = Depends(authenticated),
+        revision: Annotated[UUID | None, Query()] = None,
+    ):
+        return await request.app.state.repository.get_article(
+            owner, run_id, str(revision) if revision is not None else None
+        )
 
     @app.get("/api/v1/runs/{run_id}/revisions")
     async def revisions(run_id: str, request: Request, owner: str = Depends(authenticated)):

@@ -121,7 +121,10 @@ async def test_worker_retries_a_transient_plan_failure_then_finishes(
         events = await repository.list_events(settings.local_owner_id, run["id"])
         assert [event["event_type"] for event in events].count("retry_wait") == 1
         assert [event["event_type"] for event in events].count("plan_ready") == 1
+        assert [event["event_type"] for event in events].count("completed") == 1
         assert events[-1]["event_type"] == "completed"
+        revisions = await repository.list_revisions(settings.local_owner_id, run["id"])
+        assert len(revisions) == 1 and revisions[0]["id"] == article["id"]
 
 
 async def test_worker_retains_a_partial_artifact_when_review_fails(

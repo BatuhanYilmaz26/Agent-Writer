@@ -83,6 +83,11 @@ async def test_create_observe_worker_article_edit_download_and_delete(
     status = (await client.get(f"/api/v1/runs/{run_id}")).json()
     assert status["state"] == "needs_review"
     assert status["current_revision"]
+    # Progress counts accepted logical sections against the latest plan, not
+    # every retained draft row from each review revision.
+    assert status["progress"]["sections"] == 2
+    assert status["progress"]["tasks"] == 2
+    assert status["progress"]["sources"] == 1
 
     # Native SSE must replay committed UTF-8 events, honour Last-Event-ID and
     # terminate after the terminal event.
