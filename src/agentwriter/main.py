@@ -59,7 +59,7 @@ async def event_context(
     owner: str = Depends(authenticated),
     after: int = Query(default=0, ge=0),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
-) -> EventContext:
+) -> AsyncIterator[EventContext]:
     """Validate cursor/ownership before an SSE response starts.
 
     Raising inside the response generator would attempt to serialize an HTTP
@@ -79,7 +79,22 @@ async def event_context(
         )
     run = await request.app.state.repository.get_run(owner, run_id)
     rows = await request.app.state.repository.list_events(owner, run_id, after=after)
-    return EventContext(owner, after, rows, run["state"], run["next_event_sequence"])
+    # Recheck after database awaits, then reserve without yielding the loop.
+    # A request-scoped dependency releases the slot even if response setup or
+    # sending headers fails before the stream generator starts.
+    if observers.get(owner, 0) >= settings.max_observers_per_user:
+        raise StorageError(
+            "observer_limit", "Close another progress view before opening this one.", 429
+        )
+    observers[owner] = observers.get(owner, 0) + 1
+    try:
+        yield EventContext(owner, after, rows, run["state"], run["next_event_sequence"])
+    finally:
+        remaining = observers.get(owner, 1) - 1
+        if remaining > 0:
+            observers[owner] = remaining
+        else:
+            observers.pop(owner, None)
 
 
 class EditRequest(BaseModel):
@@ -98,7 +113,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if configured.database_url is None:
             raise RuntimeError("Set DATABASE_URL and run migrations before starting the API.")
         dsn = configured.database_url.get_secret_value()
-        async with database_pool(dsn, max_size=configured.database_pool_max_size,
+        async with database_pool(dsn, min_size=configured.database_pool_min_size,
+                                 max_size=configured.database_pool_max_size,
                                  timeout=configured.database_pool_timeout) as pool:
             app.state.repository = Repository(
                 pool, dsn, max_user_runs=configured.max_user_nonterminal_runs,
@@ -179,6 +195,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {
             "csrf_token": csrf,
             "mode": "local",
+            "model_provider": configured.model_provider,
+            "research_provider": configured.research_provider,
+            "external_calls_enabled": configured.enable_external_calls,
             "fixture": configured.model_provider == "fixture"
             or configured.research_provider == "fixture",
             "expires_in": configured.session_ttl_hours * 3600,
@@ -191,6 +210,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "csrf_token": csrf,
             "mode": "local",
             "owner": owner,
+            "model_provider": configured.model_provider,
+            "research_provider": configured.research_provider,
+            "external_calls_enabled": configured.enable_external_calls,
             "fixture": configured.model_provider == "fixture"
             or configured.research_provider == "fixture",
             "expires_in": configured.session_ttl_hours * 3600,
@@ -299,7 +321,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         async def stream() -> AsyncIterator[bytes]:
             nonlocal cursor, rows
-            app.state.observers[owner] = app.state.observers.get(owner, 0) + 1
             last_emit = time.monotonic()
             try:
                 while True:
@@ -341,8 +362,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     event="stream_error",
                     data_str=json.dumps({"code": exc.code, "resync": True}),
                 )
-            finally:
-                app.state.observers[owner] = max(0, app.state.observers.get(owner, 1) - 1)
 
         return EventSourceResponse(
             stream(),

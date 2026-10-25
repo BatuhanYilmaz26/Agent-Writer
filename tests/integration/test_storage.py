@@ -288,6 +288,27 @@ async def test_sections_events_finalization_and_human_revision_are_consistent(da
 
 
 @pytest.mark.asyncio
+async def test_progress_counts_only_claims_from_the_current_revision(database):
+    repository, _ = database
+    run = await repository.create_run("alice", {"topic": "A creative story"}, "current-claims")
+    claim = await repository.claim_job("worker")
+    assert claim is not None
+    try:
+        article = await repository.finalize(
+            claim, "# Draft\n\nA story.", review_status="needs_review",
+            claims=[{"claim_locator": "paragraph 1", "assessment": "unsupported"}],
+        )
+    finally:
+        await claim.close()
+    assert (await repository.run_progress("alice", run["id"]))["unsupported_claims"] == 1
+    edited = await repository.edit_article("alice", run["id"], article["id"], "# Edited\n\nHuman changes.")
+    assert edited["review_status"] == "unassessed"
+    assert (await repository.run_progress("alice", run["id"]))["unsupported_claims"] == 0
+    historical = await repository.get_article("alice", run["id"], article["id"])
+    assert historical["claims"][0]["assessment"] == "unsupported"
+
+
+@pytest.mark.asyncio
 async def test_cancel_barrier_rejects_late_section_and_finalization(database):
     repository, _ = database
     run = await repository.create_run("alice", {"topic": "A creative story"}, "cancel-key")
@@ -405,6 +426,16 @@ async def test_runtime_role_has_data_not_ddl_and_strict_saver_roundtrips(databas
         await admin.execute(sql.SQL("DROP OWNED BY {}").format(sql.Identifier(role)))
         await admin.execute(sql.SQL("DROP ROLE {}").format(sql.Identifier(role)))
         await admin.close()
+
+
+@pytest.mark.asyncio
+async def test_pool_prewarms_the_configured_minimum(database):
+    _, url = database
+    async with database_pool(
+        url, min_size=2, max_size=3, migrations_directory=MIGRATIONS,
+    ) as pool:
+        stats = pool.get_stats()
+        assert stats["pool_size"] == stats["pool_available"] == 2
 
 
 @pytest.mark.asyncio

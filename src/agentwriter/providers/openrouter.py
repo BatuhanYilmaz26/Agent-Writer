@@ -157,6 +157,8 @@ class OpenRouterGateway:
             "data_collection": "deny",
             "allow_fallbacks": False,
         }
+        if self.policy == "free_only":
+            provider["max_price"] = {"prompt": 0, "completion": 0, "request": 0}
         if self._providers:
             provider["only"] = list(self._providers)
         if self._zdr:

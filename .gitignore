@@ -56,6 +56,9 @@ htmlcov/
 *.sqlite3-*
 *.dump
 *.backup
+*.dump.*
+*.backup.*
+/backups/
 *.bak
 *.log
 *.log.*

@@ -25,7 +25,8 @@ bounded to 1 MiB, redirects are disabled, and returned JSON must satisfy the
 application model and its business validation.
 
 Free-only configuration accepts `openrouter/free` or explicitly configured
-`:free` model IDs. It never substitutes a paid model. Requests require parameter
+`:free` model IDs. Requests also carry a zero maximum price for prompt,
+completion and per-request charges. It never substitutes a paid model. Requests require parameter
 support and deny provider data collection; no route satisfying that policy is a
 visible provider failure, not permission to weaken the policy. The requested
 router and actual returned model remain separate metadata.
@@ -42,10 +43,28 @@ decisions; this transport never retries by itself. A rate-limit error preserves
 the caller must retain its reservation. Missing usage or cost remains unknown,
 not zero. Local cancellation does not prove remote processing or billing stopped.
 
-No authenticated OpenRouter request has been used to qualify this adapter yet.
-Contract tests use HTTPX's in-memory transport. Before activation, record current
-account quotas, successful strict-schema calls, model/provider identity, data
-policy behavior and observed cost in LLM-07.
+### Check your OpenRouter account
+
+Keep your key in an ignored file or `OPENROUTER_API_KEY`; never pass it on the
+command line. After setting `PYTHONPATH` to the project's `src` directory, run:
+
+```powershell
+.\.venv\Scripts\python.exe -m agentwriter.providers.qualification --env-file .env --output .local\openrouter\qualification.json
+```
+
+The check reads only `OPENROUTER_API_KEY` from the selected file, captures an
+allowlisted quota summary, and sends one synthetic strict-schema request through
+the production adapter. It makes no paid fallback and sends no project content.
+It can consume one free request. It never retries, weakens data policies, or
+enables live providers automatically. Use a new report filename for each check.
+
+An exit code of zero means the probe returned valid structured output with model
+and provider attribution, usage and a reported cost of exactly zero. Unknown
+cost, no eligible route, authentication or quota errors fail the check. Inspect
+the local report before choosing a live application profile. A successful probe
+does not qualify article quality, every model's schemas, or continued account
+capacity. Contract tests use HTTPX's in-memory transport and remain distinct
+from authenticated qualification.
 
 Official references, consulted 24 October 2026:
 
@@ -56,11 +75,13 @@ Official references, consulted 24 October 2026:
 
 ## Treg
 
-Treg is retained as the planned research service. Its adapter currently refuses
-calls with `research_provider_not_qualified`. It does not guess a REST schema,
-silently switch vendors, or invoke an unverified paid waterfall.
+Treg is the implemented research service. The worker enables it only with
+`RESEARCH_PROVIDER=treg`, `ENABLE_EXTERNAL_CALLS=true`, `TREG_QUALIFIED=true` and
+`TREG_TOKEN`. The qualified route uses `tinyfish.web.search` and
+`tinyfish.web.fetch`; free-only requests use a zero route-cost cap and disable
+paid fallback. A paid or unknown charge is rejected. Fixture mode never calls it.
 
-Before enabling it, complete RES-01/02: save the actual account's catalog
+Before enabling another account or changing the route, save that account's catalog
 definitions and schema hashes, verify token/organization requirements, capture
 sanitized successful and failed search/extract fixtures, and test routing cost
 controls. A preferred free vendor is not a free-only guarantee. If no verified

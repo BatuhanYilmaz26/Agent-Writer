@@ -654,6 +654,7 @@ async def serve_worker(
     runtime_scope = provider_runtime(settings) if runtime is None else contextlib.nullcontext(runtime)
     async with database_pool(
         dsn,
+        min_size=settings.database_pool_min_size,
         max_size=settings.database_pool_max_size,
         timeout=settings.database_pool_timeout,
     ) as pool, runtime_scope as active_runtime:

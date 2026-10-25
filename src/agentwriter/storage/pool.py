@@ -16,6 +16,7 @@ from .migrate import verify_schema
 async def database_pool(
     database_url: str,
     *,
+    min_size: int = 1,
     max_size: int = 8,
     timeout: float = 5.0,
     migrations_directory: Path = Path("migrations"),
@@ -23,7 +24,7 @@ async def database_pool(
     """Open, verify, yield, and close even if startup fails partway."""
     pool = AsyncConnectionPool[AsyncConnection[dict[str, Any]]](
         database_url,
-        min_size=1,
+        min_size=min_size,
         max_size=max_size,
         timeout=timeout,
         open=False,

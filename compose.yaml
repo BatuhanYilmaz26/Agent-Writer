@@ -35,7 +35,7 @@ x-app-env: &app-env
 
 services:
   db:
-    image: postgres:18
+    image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-agentwriter}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -67,7 +67,7 @@ services:
   # that namespace, so local authentication cannot be reached directly from
   # the host or a container network.
   proxy:
-    image: caddy:2-alpine
+    image: caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     command: ["caddy", "reverse-proxy", "--from", ":8080", "--to", "127.0.0.1:8000"]
     ports:
       - "127.0.0.1:8000:8080"

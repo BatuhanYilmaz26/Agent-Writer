@@ -1,0 +1,107 @@
+import json
+
+import httpx
+import pytest
+
+from agentwriter.providers.qualification import qualify_openrouter
+
+
+def completion(cost="0", provider="TestProvider"):
+    usage = {"prompt_tokens": 20, "completion_tokens": 6, "total_tokens": 26}
+    if cost is not None:
+        usage["cost"] = cost
+    return {
+        "model": "vendor/free-model", "provider": provider, "usage": usage,
+        "choices": [{"finish_reason": "stop", "message": {"content": '{"status":"ready"}'}}],
+    }
+
+
+@pytest.mark.asyncio
+async def test_qualification_uses_production_policy_and_excludes_account_secrets():
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        if request.url.path.endswith("/key"):
+            return httpx.Response(200, json={"data": {
+                "label": "private-account-label", "hash": "private-key-hash",
+                "creator_user_id": "private-user", "is_free_tier": True,
+                "free_model_daily_requests": {"limit": 50, "remaining": 49, "private": "omit"},
+            }})
+        return httpx.Response(200, json=completion())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        report = await qualify_openrouter(client, "private-token")
+    assert report["qualified"] is True
+    assert len(calls) == 2
+    assert calls[0].url == "https://openrouter.ai/api/v1/key"
+    body = json.loads(calls[1].content)
+    assert body["response_format"]["json_schema"]["strict"] is True
+    assert body["provider"]["max_price"] == {"prompt": 0, "completion": 0, "request": 0}
+    assert body["provider"]["data_collection"] == "deny"
+    assert body["provider"]["allow_fallbacks"] is False
+    serialized = json.dumps(report)
+    assert all(secret not in serialized for secret in (
+        "private-token", "private-account-label", "private-key-hash", "private-user", "omit",
+    ))
+    assert report["account"]["free_model_daily_requests"]["remaining"] == 49
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cost,provider,code", [
+    (None, "TestProvider", "provider_price_unknown"),
+    ("0.01", "TestProvider", "provider_cost_policy_violation"),
+    ("0", None, "qualification_response_metadata_missing"),
+])
+async def test_qualification_requires_known_zero_cost_and_attribution(cost, provider, code):
+    def respond(request):
+        return httpx.Response(200, json=(
+            {"data": {"is_free_tier": True}} if request.url.path.endswith("/key")
+            else completion(cost, provider)
+        ))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        report = await qualify_openrouter(client, "test-token")
+    assert report["qualified"] is False and report["code"] == code
+
+
+@pytest.mark.asyncio
+async def test_failed_account_authentication_never_dispatches_or_logs_upstream_body():
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(401, json={"error": "private upstream detail private-token"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        report = await qualify_openrouter(client, "private-token")
+    assert report["code"] == "provider_authentication_failed"
+    assert report["qualified"] is False and len(calls) == 1
+    assert "private" not in json.dumps(report)
+
+
+@pytest.mark.asyncio
+async def test_exhausted_account_quota_never_dispatches():
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, json={"data": {"free_model_daily_requests": {
+            "limit": 50, "remaining": 0,
+        }}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        report = await qualify_openrouter(client, "test-token")
+    assert report["code"] == "provider_daily_quota_exhausted"
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_paid_model_is_rejected_before_even_account_lookup():
+    calls = []
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: calls.append(request) or httpx.Response(500),
+    )) as client:
+        with pytest.raises(ValueError):
+            await qualify_openrouter(client, "test-token", model="vendor/paid-model")
+    assert calls == []

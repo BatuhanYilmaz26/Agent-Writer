@@ -17,8 +17,10 @@ and provider gate, see [configuration](configuration.md) and
 - PostgreSQL 18, either installed locally or started with Docker.
 - Docker Engine/Desktop only if you want the Compose profile.
 
-No OpenRouter, Treg or Tavily account is needed for the fixture profile. Live
-provider qualification is a separate, currently blocked gate.
+No OpenRouter, Treg or Tavily account is needed for the fixture profile.
+OpenRouter still needs a successful account qualification. Treg has a qualified
+route, but another account or routing change needs its own check. See the
+[provider guide](providers.md) before enabling external calls.
 
 ## Install the application
 
@@ -55,11 +57,11 @@ run; the `.lock` files are the reviewed, hash-pinned sets.
 Copy the safe local example and keep the real file private:
 
 ```powershell
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 ```bash
-cp .env.example .env
+test -e .env || cp .env.example .env
 ```
 
 The application does **not** discover `.env` automatically. Pass it explicitly
@@ -275,6 +277,42 @@ disclosure and citation marker:
 .venv/bin/python scripts/smoke.py
 ```
 
+## Check a running local fixture profile
+
+Start the API and worker with both providers set to `fixture` and
+`ENABLE_EXTERNAL_CALLS=false`. With the current source running, use:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_local.py --url http://127.0.0.1:8000 --runs 5 --output .local\local-check.json
+```
+
+The check requires a literal loopback address, a ready worker and the explicit
+fixture-only session profile. It creates its own runs, reopens them, verifies
+download hashes and synthetic labels, replays committed progress, checks the
+terminal 204 response, then deletes only those test runs and its own session.
+Reports contain counts/timings, not article text, credentials or session tokens.
+Use a new output filename for each check and close other progress views first.
+
+Use a separate disposable database/profile for a 100-run soak. Fixture calls
+still consume the application's daily call count, so the default daily ceiling
+may stop a long batch. Set an adequate `USER_DAILY_CALLS` only in that disposable
+fixture worker's profile (the recorded 100-run check used 10000), then select
+`--runs 100`. Do not raise live-provider quotas or budgets for this check. Local
+fixture timings do not establish live-model quality or deployed capacity.
+
+Before staging or publishing changes, check the repository boundary:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_publication.py --worktree
+# After staging only the reviewed public files:
+.\.venv\Scripts\python.exe scripts\check_publication.py
+```
+
+The first command checks current and untracked nonignored files; the second
+checks exact index bytes. Both reject internal paths and common token/private-key
+patterns. They complement `.gitignore` and a content review; they are not a full
+security audit. Internal plans, trackers, evidence and backups stay local.
+
 ## Docker Compose profile
 
 Compose runs PostgreSQL, a one-shot migration, a Caddy loopback proxy, the API
@@ -322,9 +360,30 @@ binds only to loopback inside it.
 Back up before changing migrations, retention bounds or a provider profile.
 The local profile uses an encrypted logical backup:
 
+The shell inside the database container uses `pipefail`: an unsuccessful dump
+must fail the backup even if encryption itself succeeds. Keep encrypted dumps
+and their checksums in the ignored `backups/` directory.
+
+From PowerShell, first supply `BACKUP_PASSPHRASE` securely in the process
+environment, then:
+
+```powershell
+New-Item -ItemType Directory -Force backups | Out-Null
+$backupName = 'agentwriter-' + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') + '.dump.enc'
+docker exec -e BACKUP_PASSPHRASE agentwriter-db-1 bash -o pipefail -ec 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out /tmp/agentwriter.dump.enc'
+if ($LASTEXITCODE -ne 0) { throw 'Backup failed; do not use the partial output.' }
+docker cp agentwriter-db-1:/tmp/agentwriter.dump.enc (Join-Path backups $backupName)
+if ($LASTEXITCODE -ne 0) { throw 'Backup copy failed; retain the container copy.' }
+Get-FileHash (Join-Path backups $backupName) -Algorithm SHA256
+docker exec agentwriter-db-1 rm -f -- /tmp/agentwriter.dump.enc
+```
+
+From a Linux shell with the corresponding process variables set:
+
 ```bash
+mkdir -p backups
 docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" -e BACKUP_PASSPHRASE="$BACKUP_PASSPHRASE" \
-  agentwriter-db-1 sh -c \
+  agentwriter-db-1 bash -o pipefail -ec \
   'pg_dump -U agentwriter -d agentwriter --format=custom \
    | openssl enc -aes-256-cbc -pbkdf2 -salt \
        -pass env:BACKUP_PASSPHRASE -out /tmp/agentwriter.dump.enc'
@@ -341,7 +400,7 @@ docker exec agentwriter-db-1 psql -U agentwriter -d postgres \
   -c "CREATE DATABASE agentwriter_restore"
 docker cp backups/agentwriter-20261024T000000Z.dump.enc \
   agentwriter-db-1:/tmp/restore.dump.enc
-docker exec -e BACKUP_PASSPHRASE="$BACKUP_PASSPHRASE" agentwriter-db-1 sh -c \
+docker exec -e BACKUP_PASSPHRASE="$BACKUP_PASSPHRASE" agentwriter-db-1 bash -o pipefail -ec \
   'openssl enc -d -aes-256-cbc -pbkdf2 -pass env:BACKUP_PASSPHRASE \
      -in /tmp/restore.dump.enc \
    | pg_restore -U agentwriter -d agentwriter_restore \

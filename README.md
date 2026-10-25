@@ -15,25 +15,6 @@ fixture.
 - [Configuration](docs/configuration.md) — settings, provider gates and operational bounds.
 - [Workflow](docs/workflow.md) — how the writing graph, review and citations work.
 
-## Local quick start
-
-```powershell
-uv venv .venv --python python
-uv pip sync --python .venv\Scripts\python.exe --require-hashes --only-binary :all: --index-url https://pypi.org/simple requirements-dev.lock
-$env:PYTHONPATH = (Join-Path (Get-Location) 'src')
-Copy-Item .env.example .env
-# Put the DSNs in .env, then export them in this shell for the migration
-# command; the exact commands are in Setup and operations. The migration
-# command does not read .env automatically.
-.\.venv\Scripts\python.exe -m agentwriter.storage.migrate --directory migrations --runtime-role agentwriter_runtime
-.\.venv\Scripts\python.exe -m agentwriter --env-file .env serve
-# In a second terminal:
-.\.venv\Scripts\python.exe -m agentwriter --env-file .env worker
-```
-
-Open `http://127.0.0.1:8000`. The full command sequence, Linux instructions and
-Docker Compose profile are in [Setup and operations](docs/setup-and-operations.md).
-
 ## Repository map
 
 | Path | Purpose |
@@ -41,7 +22,7 @@ Docker Compose profile are in [Setup and operations](docs/setup-and-operations.m
 | `src/agentwriter/` | FastAPI app, browser client, LangGraph workflow, providers, storage and worker. |
 | `migrations/` | Checksummed PostgreSQL schema migrations. |
 | `tests/` | Unit and real-PostgreSQL integration tests. |
-| `scripts/` | Fresh-checkout smoke test, corpus generator and deterministic evaluator. |
+| `scripts/` | Smoke tests, local fixture acceptance, publication checks, dependency review and evaluation. |
 | `evaluation/corpus/v1/` | Versioned quality corpus, editorial rubric and regression baseline. |
 | `ops/` | Prometheus alert rules and retention service/timer units. |
 | `docs/` | User, setup, configuration, workflow and provider documentation. Internal runbooks and evidence stay local. |
@@ -69,7 +50,7 @@ This repository is not a qualified production release. The following remain
 unverified or blocked until real accounts, infrastructure or human reviewers are
 available:
 
-- live OpenRouter and Treg provider qualification;
+- live OpenRouter account qualification; changed Treg accounts/routes need requalification;
 - hosted OIDC identity (the API fails closed for `AUTH_MODE=oidc`);
 - human factual/editorial review and judge agreement;
 - deployed load, fault-injection and release acceptance;

@@ -55,6 +55,7 @@ async def test_openrouter_uses_strict_schema_fixed_origin_and_no_hidden_fallback
         "require_parameters": True,
         "data_collection": "deny",
         "allow_fallbacks": False,
+        "max_price": {"prompt": 0, "completion": 0, "request": 0},
     }
     assert body["response_format"]["json_schema"]["strict"] is True
     assert body["response_format"]["json_schema"]["schema"]["additionalProperties"] is False

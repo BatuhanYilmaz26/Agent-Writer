@@ -12,6 +12,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -41,10 +43,14 @@ def brief() -> dict[str, object]:
 
 @asynccontextmanager
 async def live_server(database_url: str) -> AsyncIterator[tuple[str, Any]]:
+    parsed = urlsplit(database_url)
+    query = dict(parse_qsl(parsed.query))
+    query["application_name"] = f"sse-test-{uuid4().hex}"
+    server_database_url = parsed._replace(query=urlencode(query, quote_via=quote)).geturl()
     settings = Settings(
         _env_file=None,
         app_env="test",
-        database_url=database_url,
+        database_url=server_database_url,
         allowed_hosts=("127.0.0.1", "localhost"),
         max_user_nonterminal_runs=10,
         sse_heartbeat_seconds=1,
@@ -153,11 +159,14 @@ async def test_real_socket_heartbeat_then_terminal_reconnect(
                 )
                 # Polling releases its pooled connection; an observer must not
                 # hold an idle-in-transaction session while waiting.
+                # Other isolated schemas can be used by local previews at the
+                # same time, so inspect this server's connections only.
                 async with app.state.repository.pool.connection() as connection:
                     idle = await (
                         await connection.execute(
                             "SELECT count(*) AS count FROM pg_stat_activity "
-                            "WHERE datname=current_database() AND state='idle in transaction'"
+                            "WHERE datname=current_database() AND state='idle in transaction' "
+                            "AND application_name=current_setting('application_name')"
                         )
                     ).fetchone()
                 assert idle["count"] == 0
@@ -244,3 +253,40 @@ async def test_real_socket_observer_limit_and_disconnect_does_not_cancel_run(
 
             status = (await client.get(f"/api/v1/runs/{run_id}")).json()
             assert status["state"] == "needs_review"
+
+
+async def test_simultaneous_streams_cannot_race_past_the_observer_cap(
+    acceptance_database: str, monkeypatch,
+) -> None:
+    async with live_server(acceptance_database) as (base_url, app):
+        async with httpx.AsyncClient(base_url=base_url, timeout=15) as client:
+            await start_session(client)
+            created = await enqueue(client, "simultaneous-observers")
+            original = app.state.repository.list_events
+            arrivals = 0
+            both_reading = asyncio.Event()
+
+            async def synchronized_events(*args, **kwargs):
+                nonlocal arrivals
+                rows = await original(*args, **kwargs)
+                arrivals += 1
+                if arrivals == 2:
+                    both_reading.set()
+                await asyncio.wait_for(both_reading.wait(), timeout=5)
+                return rows
+
+            monkeypatch.setattr(app.state.repository, "list_events", synchronized_events)
+            url = f"/api/v1/runs/{created['id']}/events"
+            responses = await asyncio.gather(*(
+                client.send(client.build_request("GET", url), stream=True) for _ in range(2)
+            ))
+            try:
+                assert sorted(response.status_code for response in responses) == [200, 429]
+                assert app.state.observers[app.state.settings.local_owner_id] == 1
+            finally:
+                await asyncio.gather(*(response.aclose() for response in responses))
+            for _ in range(50):
+                if not app.state.observers:
+                    break
+                await asyncio.sleep(0.05)
+            assert app.state.observers == {}

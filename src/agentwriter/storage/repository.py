@@ -326,7 +326,7 @@ class Repository:
                     "(SELECT count(*) FROM sources s WHERE s.run_id=r.id) AS sources,"
                     "(SELECT count(*) FROM evidence_excerpts e WHERE e.run_id=r.id) AS excerpts,"
                     "(SELECT count(*) FROM claim_citations c JOIN article_revisions a ON a.id=c.revision_id "
-                    " WHERE a.run_id=r.id AND c.assessment->>'assessment' IN ('unsupported','conflicting')) AS unsupported_claims "
+                    " WHERE a.id=r.current_revision AND c.assessment->>'assessment' IN ('unsupported','conflicting')) AS unsupported_claims "
                     "FROM runs r WHERE r.id=%s",
                     (_uuid(run_id),),
                 )
