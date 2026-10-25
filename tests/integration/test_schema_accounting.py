@@ -92,3 +92,41 @@ async def test_rejected_plan_has_bounded_repairs_accounting_and_safe_api_error(
         assert calls[1]["call_id"].endswith(":repair1")
         assert "relationships between fields" in sent[1]["messages"][-1]["content"]
     assert all("private" not in json.dumps(body) for body in sent)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("http_status,code,description", [
+    (404, "provider_capability_unavailable", "currently unavailable"),
+    (429, "provider_rate_limited", "request limit was reached"),
+])
+async def test_provider_availability_error_is_actionable_and_never_triggers_schema_repair(
+    api_client, acceptance_database, http_status, code, description,
+):
+    client, app = api_client
+    settings = Settings(
+        _env_file=None, database_url=acceptance_database, model_provider="openrouter",
+        openrouter_api_key="test-key", openrouter_qualified=True, enable_external_calls=True,
+        openrouter_schema_repairs=1, max_job_attempts=1,
+    )
+    created = await client.post("/api/v1/runs", json={
+        "topic": "Write a short story about a dragon", "research_mode": "off", "target_words": 500,
+    }, headers={"Idempotency-Key": "provider-unavailable"})
+    assert created.status_code == 202
+    run_id = created.json()["id"]
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(http_status, headers={"Retry-After": "120"},
+                              text="private upstream response and credentials")
+
+    claim = await app.state.repository.claim_job("unavailable-worker")
+    assert claim is not None
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as transport:
+        await process_claim(app.state.repository, claim, settings,
+                            ProviderRuntime(model=OpenRouterGateway(transport, "test-key")))
+    run = (await client.get(f"/api/v1/runs/{run_id}")).json()
+    assert len(calls) == 1 and run["model_call_count"] == 1
+    assert run["state"] == "failed" and run["error_code"] == code
+    assert description in run["error_message"] and "private" not in json.dumps(run)
+    assert (await client.get(f"/api/v1/runs/{run_id}/article")).status_code == 404

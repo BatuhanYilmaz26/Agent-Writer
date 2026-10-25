@@ -235,6 +235,8 @@ external font or icon service is contacted when you use the app.
 | “You have reached the current run limit…” (`429`) | Too many non-terminal runs or queue full. | Wait, cancel or delete a run. |
 | “The service is temporarily unavailable…” (`503`) | Database or provider dependency is unavailable. | Retry after the service recovers; saved work is durable. |
 | “The AI response did not match the required writing format…” | The provider returned content that failed validation. | Check provider status and limits before starting a new draft. Invalid content was not accepted; partial work, if available, still needs review. |
+| “The configured AI model or writing capability is currently unavailable…” | The configured route could not provide the required model capability. | Check model availability and try later. A free-only profile will not switch to a paid route. |
+| “The AI provider's request limit was reached…” | Provider capacity remained limited when the run stopped. | Wait before starting a new draft; repeatedly restarting can consume more quota. |
 
 ## Boundaries
 

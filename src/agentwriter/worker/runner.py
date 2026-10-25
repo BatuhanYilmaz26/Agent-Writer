@@ -310,6 +310,16 @@ async def provider_runtime(settings: Settings):
 
 
 def _safe_message(code: str) -> str:
+    if code == "provider_capability_unavailable":
+        return (
+            "The configured AI model or writing capability is currently unavailable. "
+            "Check model availability before starting a new draft."
+        )
+    if code == "provider_rate_limited":
+        return (
+            "The AI provider's request limit was reached. "
+            "Wait for capacity to recover before starting a new draft."
+        )
     if code == "provider_schema_invalid":
         return (
             "The AI response did not match the required writing format. "
