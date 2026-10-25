@@ -18,6 +18,22 @@ The default fixture plan has two sections. It can produce initial drafts and at 
 
 Research-off drafts are labeled unresearched. Unsupported citations, incomplete task sets and invalid plan identities cannot silently become accepted articles. Human edits are new unassessed revisions; they never inherit generated approval.
 
+## Reviewing a saved edit
+
+A saved human edit can receive a separate review job. It shares the writing
+queue's owner limits, leases, cancellation and billing controls, with its own
+deadline and a maximum of two model dispatches including a schema repair.
+The job assesses the immutable revision and hash; it cannot rewrite the text
+or transfer its result to a later save. The original generation outcome and
+revision bytes remain intact. The editorial panel shows the latest assessment
+of the selected revision, while revision history retains the original saved state.
+
+Reviews use stored evidence. Missing excerpts, unsupported claims, material
+word-budget deviations and newly introduced source-dependent facts prevent
+automatic acceptance. A review does not collect fresh sources. Fixtures remain
+synthetic and other-language revisions require fluency review. An interrupted
+review with an already authorized dispatch is not automatically sent again.
+
 ## Section ordering and revision limits
 
 Plans contain two to eight tasks with unique IDs, contiguous order and word budgets summing to the requested target. Workers may finish in any order. Assembly waits for the real LangGraph fan-out barrier and then selects one latest accepted revision for every expected task, sorting by plan order.

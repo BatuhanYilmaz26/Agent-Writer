@@ -103,6 +103,11 @@ class EditRequest(BaseModel):
     markdown: str = Field(min_length=1, max_length=200000)
 
 
+class ReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    content_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     configured = settings or Settings()
 
@@ -298,6 +303,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await request.app.state.repository.edit_article(
             owner, run_id, str(change.parent_revision), rendered,
             citation_map={"sources": sources_by_id, "editable_markdown": change.markdown, "language": language},
+        )
+
+    @app.post("/api/v1/runs/{run_id}/revisions/{revision_id}/reviews", status_code=202)
+    async def request_review(
+        run_id: UUID, revision_id: UUID, change: ReviewRequest, request: Request,
+        owner: str = Depends(authenticated),
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ):
+        return await request.app.state.repository.create_revision_review(
+            owner, str(run_id), str(revision_id), change.content_hash, idempotency_key,
         )
 
     @app.get("/api/v1/runs/{run_id}/revisions/{revision}/download")

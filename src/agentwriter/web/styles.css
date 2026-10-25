@@ -2779,3 +2779,6 @@ body[data-focus='true'] .draft-grid {
 @media (max-width:570px) {
   .language-picker select {font-size:16px;min-height:40px}
 }
+
+.review-actions {display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 10px}
+.review-actions button {min-height:40px;font-size:12px}

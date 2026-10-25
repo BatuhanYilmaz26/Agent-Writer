@@ -62,6 +62,13 @@ release gates.
 
 ## Retry and circuit policy
 
+Saved-revision reviews have separate run identities and share the owner's
+daily quota and queue limits. Each review allows at most two model requests,
+including a schema repair, with no scheduled provider retry. Reclaiming an
+interrupted review after a dispatch does not authorize a duplicate request;
+the user must explicitly request a new review. Reviews do not perform research
+or rewrite the article.
+
 Content acceptance and billing are separate. A structured AI response that
 fails validation is a failed output, while its reported usage and cost are
 still recorded when available. A known zero charge can be reconciled; missing

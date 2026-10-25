@@ -469,4 +469,4 @@ This profile is local and fixture-only. It does not qualify live OpenRouter or
 Treg behavior, hosted OIDC identity, human factual review, deployed load or
 fault behavior, or release acceptance. The manual screen-reader sample for the
 browser is still a pre-public-release item. See the root
-[README](../README.md#boundaries) for the current gate list.
+[README](../README.md#local-use-and-providers) for the project overview and local-use guidance.

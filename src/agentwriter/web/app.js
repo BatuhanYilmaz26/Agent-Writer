@@ -64,6 +64,9 @@ const state = {
   articleTicket: 0,
   historyTicket: 0,
   evidenceLoading: false,
+  reviewTimer: null,
+  reviewSubmitting: false,
+  reviewKey: null,
 };
 
 class ApiError extends Error {
@@ -546,6 +549,8 @@ export function renderMarkdown(root, text) {
 }
 
 function stopObserving() {
+  window.clearTimeout(state.reviewTimer);
+  state.reviewTimer = null;
   if (state.stream) {
     state.stream.close();
     state.stream = null;
@@ -760,6 +765,7 @@ function renderRun(run) {
     }
   }
   announce(`${STATE_LABELS[run.state] || run.state}. ${formatProgress(run)}`);
+  scheduleReviewPoll();
 }
 
 async function refreshRun() {
@@ -802,17 +808,21 @@ function renderReview(article) {
   $("review-panel").hidden = false;
   const status = $("review-status");
   const messages = {
-    approved: "This generated revision passed its configured checks. Review the evidence before publishing.",
+    approved: "This saved revision passed its configured checks. Review the evidence before publishing.",
     needs_review: "This draft needs your review. Check its evidence, limitations and claim support.",
     failed: "Generation stopped before approval. A partial draft is retained for review only.",
     unassessed: "This human-edited revision has not been assessed. Earlier approval does not carry over.",
   };
-  status.textContent = messages[article.review_status] || messages.needs_review;
-  status.dataset.status = article.review_status || "needs_review";
+  const assessment = article.assessment && article.assessment.revision_id === article.id
+    && article.assessment.content_hash === article.content_hash ? article.assessment : null;
+  const reviewStatus = assessment ? assessment.review_status : article.review_status;
+  status.textContent = messages[reviewStatus] || messages.needs_review;
+  status.dataset.status = reviewStatus || "needs_review";
 
   const issues = $("issues");
   issues.replaceChildren();
-  const findings = Array.isArray(article.issues) ? article.issues : [];
+  const reviewedIssues = assessment ? assessment.review.issues : article.issues;
+  const findings = Array.isArray(reviewedIssues) ? reviewedIssues : [];
   $("issue-count").textContent = String(findings.length);
   for (const issue of findings) {
     const item = document.createElement("li");
@@ -863,6 +873,123 @@ function renderReview(article) {
     item.textContent = "No cited factual sentences were assessed for this revision.";
     claims.append(item);
   }
+  updateReviewControls();
+  scheduleReviewPoll();
+  if (assessment) {
+    const known = state.revisions.find((item) => item.id === article.id);
+    if (known && known.assessment_status !== assessment.review_status) {
+      known.assessment_status = assessment.review_status;
+      renderRevisionOptions();
+    }
+  }
+}
+
+function updateReviewControls() {
+  const article = state.article;
+  const human = article && article.author_type === "human";
+  $("revision-review-tools").hidden = !human;
+  if (!human) return;
+  const job = article.assessment_job;
+  const pending = job && !TERMINAL.has(job.state);
+  const latest = state.revisions.length && state.revisions[0].id === article.id;
+  const button = $("request-review");
+  button.disabled = state.reviewSubmitting || state.saving || state.editorDirty || !latest || pending;
+  button.setAttribute("aria-busy", String(state.reviewSubmitting));
+  button.textContent = state.reviewSubmitting ? "Queuing review…" : pending ? "Review in progress…"
+    : article.assessment ? "Review again" : "Review saved revision";
+  button.title = state.editorDirty ? "Save your changes before requesting a review."
+    : !latest ? "Select the latest saved revision to request a review." : "";
+  $("cancel-review").hidden = !pending;
+  $("cancel-review").disabled = pending && job.state === "cancel_requested";
+  $("cancel-review").textContent = job && job.state === "cancel_requested" ? "Cancelling…" : "Cancel review";
+  const last = article.assessment
+    ? ` Last assessment: ${new Date(article.assessment.created_at).toLocaleString()}.` : "";
+  $("review-job").textContent = pending
+    ? `Saved revision review: ${STATE_LABELS[job.state] || job.state}.${last}`
+    : job && (job.state === "failed" || job.state === "cancelled")
+      ? `${job.error_message || (job.state === "cancelled" ? "Review cancelled." : "Review stopped.")}${last}`
+      : article.assessment ? `Assessment saved for this exact revision.${last}`
+        : "This saved edit has no fresh assessment yet.";
+}
+
+function scheduleReviewPoll() {
+  window.clearTimeout(state.reviewTimer);
+  state.reviewTimer = null;
+  const job = state.article && state.article.assessment_job;
+  if (job && !TERMINAL.has(job.state)) state.reviewTimer = window.setTimeout(refreshReviewJob, 3000);
+}
+
+async function refreshReviewJob() {
+  if (!state.activeRun || !state.article) return;
+  if (state.editorDirty) { scheduleReviewPoll(); return; }
+  const run = state.activeRun;
+  const revision = state.article.id;
+  try {
+    const article = await api(`/api/v1/runs/${run}/article?revision=${encodeURIComponent(revision)}`);
+    if (run !== state.activeRun || !state.article || revision !== state.article.id) return;
+    state.article = article;
+    if (state.reviewKey && state.reviewKey.signature === `${run}:${revision}:${article.content_hash}`
+        && article.assessment_job && article.assessment_job.id !== state.reviewKey.previousJobId) {
+      state.reviewKey = null;
+    }
+    if (!state.editorDirty) renderReview(article);
+    if (article.assessment_job && TERMINAL.has(article.assessment_job.state)) {
+      await refreshRun();
+      announce("Saved revision review finished. Read its assessment and findings before publishing.");
+    }
+  } catch (error) {
+    if (run !== state.activeRun) return;
+    showError(error);
+    if (!(error instanceof ApiError && [401, 403, 404, 410].includes(error.status))) scheduleReviewPoll();
+  }
+}
+
+async function requestRevisionReview() {
+  if (!state.article || !state.activeRun || state.reviewSubmitting || state.editorDirty || state.saving) return;
+  const run = state.activeRun;
+  const revision = state.article.id;
+  const hash = state.article.content_hash;
+  const signature = `${run}:${revision}:${hash}`;
+  if (!state.reviewKey || state.reviewKey.signature !== signature) {
+    state.reviewKey = {
+      signature, key: crypto.randomUUID(),
+      previousJobId: state.article.assessment_job ? state.article.assessment_job.id : null,
+    };
+  }
+  state.reviewSubmitting = true;
+  updateReviewControls();
+  clearError();
+  try {
+    const job = await api(`/api/v1/runs/${run}/revisions/${revision}/reviews`, {
+      method: "POST", headers: { "Idempotency-Key": state.reviewKey.key }, body: { content_hash: hash },
+    });
+    state.reviewKey = null;
+    if (run !== state.activeRun || !state.article || revision !== state.article.id) return;
+    state.article.assessment_job = job;
+    updateReviewControls();
+    scheduleReviewPoll();
+    if (TERMINAL.has(job.state)) await refreshReviewJob();
+    announce("Review queued for this saved revision. Your text stays unchanged.");
+  } catch (error) {
+    if (run === state.activeRun) { showError(error); await refreshReviewJob(); }
+  } finally {
+    state.reviewSubmitting = false;
+    updateReviewControls();
+  }
+}
+
+async function cancelRevisionReview() {
+  const article = state.article;
+  if (!article || !article.assessment_job || TERMINAL.has(article.assessment_job.state)) return;
+  const run = state.activeRun;
+  try {
+    const job = await api(`/api/v1/runs/${article.assessment_job.id}/cancel`, { method: "POST" });
+    if (run !== state.activeRun || !state.article || state.article.id !== article.id) return;
+    state.article.assessment_job = job;
+    updateReviewControls();
+    scheduleReviewPoll();
+    if (TERMINAL.has(job.state)) await refreshReviewJob();
+  } catch (error) { if (run === state.activeRun) showError(error); }
 }
 
 function renderSources(sources) {
@@ -922,6 +1049,7 @@ function updateEditingControls() {
   $("save").title = selected && latest && selected !== latest
     ? "Select the latest revision before saving an edit."
     : "";
+  updateReviewControls();
 }
 
 function renderRevisionOptions() {
@@ -930,7 +1058,7 @@ function renderRevisionOptions() {
   for (const [index, revision] of state.revisions.entries()) {
     const option = document.createElement("option");
     option.value = revision.id;
-    option.textContent = `${index === 0 ? "Latest · " : ""}${revision.author_type === "human" ? "Your edit" : "Generated"} · ${revision.review_status} · ${new Date(revision.created_at).toLocaleString()}`;
+    option.textContent = `${index === 0 ? "Latest · " : ""}${revision.author_type === "human" ? "Your edit" : "Generated"} · ${revision.assessment_status || revision.review_status} · ${new Date(revision.created_at).toLocaleString()}`;
     select.append(option);
   }
   if (state.article) select.value = state.article.id;
@@ -1338,8 +1466,11 @@ function wireEvents() {
   $("editor").addEventListener("input", () => {
     state.editorDirty = true;
     $("editor-count").textContent = `${$("editor").value.length.toLocaleString()} characters · unsaved changes`;
+    updateReviewControls();
   });
   $("save").addEventListener("click", () => saveEdit());
+  $("request-review").addEventListener("click", requestRevisionReview);
+  $("cancel-review").addEventListener("click", cancelRevisionReview);
   $("conflict-reload").addEventListener("click", () => {
     state.conflictText = null;
     $("conflict").hidden = true;

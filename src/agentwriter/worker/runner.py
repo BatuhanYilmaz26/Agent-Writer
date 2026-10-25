@@ -26,7 +26,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
-from agentwriter.domain import CreateRunRequest
+from agentwriter.domain import CreateRunRequest, EditorialReview
 from agentwriter.domain.languages import language_profile
 from agentwriter.graph import (
     GraphDependencies,
@@ -37,12 +37,13 @@ from agentwriter.graph import (
     make_fixture_dependencies,
 )
 from agentwriter.providers.base import ModelGateway, ProviderError
-from agentwriter.providers.fixture import FixtureResearchGateway
+from agentwriter.providers.fixture import FixtureGateway, FixtureResearchGateway
 from agentwriter.providers.openrouter import OpenRouterGateway
 from agentwriter.providers.tavily import TavilyResearchGateway
 from agentwriter.providers.treg import TregResearchGateway
 from agentwriter.services.budgets import BudgetService, retry_decision
 from agentwriter.services.citations import CitationError, render_citations
+from agentwriter.services.revision_review import normalize_review, review_input
 from agentwriter.settings import Settings
 from agentwriter.storage.pool import database_pool
 from agentwriter.storage.repository import Claim, Repository, StorageError
@@ -310,6 +311,12 @@ async def provider_runtime(settings: Settings):
 
 
 def _safe_message(code: str) -> str:
+    if code == "review_interrupted":
+        return "This review was interrupted after a model dispatch. Request a new review when you are ready; it was not repeated automatically."
+    if code in {"review_revision_mismatch", "review_integrity_mismatch", "review_unknown_task"}:
+        return "The assessment did not match the saved revision's review contract. Your text is unchanged and no assessment was applied."
+    if code == "model_input_too_large":
+        return "The draft and evidence exceed the configured model input limit. Shorten the content or review the model configuration before trying again."
     if code == "provider_capability_unavailable":
         return (
             "The configured AI model or writing capability is currently unavailable. "
@@ -464,6 +471,11 @@ async def execute_claim(
 ) -> dict[str, Any]:
     """Run or resume one thread, then commit exactly one artifact transaction."""
     request = CreateRunRequest.model_validate(claim.run["request"])
+    revision_review = claim.run.get("kind") == "revision_review"
+    if revision_review:
+        settings = settings.model_copy(update={
+            "max_model_calls": min(2, settings.max_model_calls), "max_job_attempts": 1,
+        })
     budget = BudgetService(
         repository,
         max_run_calls=settings.max_model_calls,
@@ -512,7 +524,34 @@ async def execute_claim(
     else:
         runtime_context = None
     graph: Any = None
+    config: RunnableConfig = {}
     try:
+        if revision_review:
+            # A reclaimed job with an already dispatched request must not
+            # silently repeat a review whose remote outcome may be unknown.
+            if int(claim.run.get("model_call_count", 0)):
+                raise ProviderError("review_interrupted")
+            subject = await repository.review_subject(claim)
+            messages, issues, claims = review_input(subject)
+            gateway = runtime.model or FixtureGateway({"revision-review": {
+                "approved": False, "assessed_revision": 0,
+                "assessed_hash": subject["article"]["content_hash"], "issues": [],
+            }})
+            accounted = AccountedGateway(gateway, budget, claim, settings)
+            remaining = (_deadline(claim) - datetime.now(UTC)).total_seconds()
+            if remaining <= 0:
+                raise ProviderError("deadline_exceeded")
+            try:
+                async with asyncio.timeout(remaining):
+                    result = await accounted.generate(
+                        EditorialReview, messages, "revision-review",
+                        max_tokens=settings.model_max_output_tokens,
+                    )
+                    review = normalize_review(result, subject, issues, fixture=settings.model_provider == "fixture")
+                    await repository.finalize_review(claim, review, claims)
+            except TimeoutError:
+                raise ProviderError("deadline_exceeded") from None
+            return {"outcome": "succeeded" if review["approved"] else "needs_review"}
         deps = _dependencies(
             settings,
             request,
@@ -531,7 +570,7 @@ async def execute_claim(
             ),
         )
         graph = build_graph(deps).compile(checkpointer=saver)
-        config: RunnableConfig = {
+        config = {
             "configurable": {"thread_id": claim.run_id},
             "recursion_limit": 80,
         }

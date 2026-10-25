@@ -1,62 +1,86 @@
 # AgentWriter
 
-Source-aware article drafting with durable runs, transparent evidence and human review.
+A local writing studio for source-aware blog posts, thoughtful editing and clear review.
 
-AgentWriter turns a brief into a structured Markdown draft, shows the evidence and
-review findings behind it, and keeps every revision. Article languages include
-English, Turkish, Spanish, Portuguese and German. The default local profile uses
-fixture model and research providers, so it is safe to explore without credentials
-or network calls. A draft is never presented as approved or fact checked by the
-fixture.
+[User guide](docs/user-guide.md) · [Get started](docs/setup-and-operations.md) · [Configuration](docs/configuration.md)
 
-## Start here
+AgentWriter turns a brief into an editable Markdown draft. Choose your audience,
+tone and language, follow the writing progress, inspect the sources, and keep
+every saved revision. You decide what is ready to publish.
 
-- [User guide](docs/user-guide.md) — create, review, edit, download, reopen, cancel and delete drafts.
-- [Setup and operations](docs/setup-and-operations.md) — Windows/Linux setup, PostgreSQL, API/worker, probes, tests, evaluation and Compose.
-- [Configuration](docs/configuration.md) — settings, provider gates and operational bounds.
-- [Workflow](docs/workflow.md) — how the writing graph, review and citations work.
+![AgentWriter workspace showing a saved story, revision review and editorial findings](assets/writing-studio.png)
 
-## Repository map
+*Local fixture demo with sample story text. Synthetic reviews demonstrate the workflow; they do not certify writing quality.*
 
-| Path | Purpose |
+## What you can do
+
+- **Write in five languages.** English, Turkish, Spanish, Portuguese and German.
+- **Work from a clear brief.** Set the audience, tone, target length and research preference.
+- **Keep evidence close.** Inspect source links, citation checks and claim-support findings alongside the draft.
+- **Edit with a history.** Save changes as new revisions, reopen earlier versions and download the exact Markdown you selected.
+- **Request a fresh review.** Assess a saved edit without rewriting it. The assessment belongs to that revision; later edits start unassessed.
+- **Come back later.** Runs and progress are stored in PostgreSQL and processed by a separate worker.
+
+## Get started
+
+Follow the [setup guide](docs/setup-and-operations.md) for Windows, Linux or the
+local Docker Compose profile. It covers the prerequisites, database, API and
+worker in one place. After startup, open the local workspace shown by the guide.
+
+The default fixture profile needs no AI account or API key and makes no model or
+research requests. Use it to explore the complete writing and revision workflow.
+
+To create your first draft, enter a topic, choose a language and select
+**Create draft**. Open **Edit Markdown** to make changes, then save a new revision.
+The [user guide](docs/user-guide.md) walks through research, review, downloads
+and saved drafts.
+
+## Local use and providers
+
+The current application is intended for localhost. Local authentication is a
+single workspace identity; hosted sign-in is not available. Keep the service on
+loopback rather than exposing it publicly.
+
+Live generation uses [OpenRouter](docs/providers.md#openrouter), with
+`openrouter/free` as the default model selection. Research can use
+[Treg](docs/providers.md#treg); Tavily is an optional, separately configured
+adapter. External calls require explicit server configuration and account checks.
+Free-only routing never falls back to a paid model, but capacity and model
+capabilities can vary between requests.
+
+Review source support, language fluency and editorial findings before publishing.
+An AI assessment or a valid citation does not establish that a claim is true.
+Fixture output is labeled synthetic, and non-English drafts require your review.
+
+## Documentation
+
+| Guide | What it covers |
 |---|---|
-| `src/agentwriter/` | FastAPI app, browser client, LangGraph workflow, providers, storage and worker. |
-| `migrations/` | Checksummed PostgreSQL schema migrations. |
-| `tests/` | Unit and real-PostgreSQL integration tests. |
-| `scripts/` | Smoke tests, local fixture acceptance, publication checks, dependency review and evaluation. |
-| `evaluation/corpus/v1/` | Versioned quality corpus, editorial rubric and regression baseline. |
-| `ops/` | Prometheus alert rules and retention service/timer units. |
-| `docs/` | User, setup, configuration, workflow and provider documentation. Internal runbooks and evidence stay local. |
-| `Dockerfile`, `compose.yaml` | Non-root production-shaped local image and loopback Compose profile. |
-| `requirements.in`, `requirements.lock` | Direct runtime pins and hashed transitive runtime lock. |
-| `requirements-dev.in`, `requirements-dev.lock` | Direct development pins and hashed transitive development lock. |
+| [User guide](docs/user-guide.md) | Creating, editing, reviewing and managing drafts |
+| [Setup and operations](docs/setup-and-operations.md) | Installation, local services, tests and maintenance |
+| [Configuration](docs/configuration.md) | Languages, providers, quotas and limits |
+| [Writing workflow](docs/workflow.md) | Planning, research, generation and review |
+| [Providers](docs/providers.md) | Account checks, routing, privacy and citations |
+| [Budgets](docs/budgets.md) | Request limits, cost accounting and retries |
 
-## What is verified locally
+## Project structure
 
-- Durable create → research → draft → review → edit → download → reopen, with a
-  real PostgreSQL database and a separately supervised worker.
-- Human edits are stored as new, `unassessed` revisions; approval never carries
-  over. Concurrent edits return a recoverable conflict.
-- Two local owners on one database are isolated: one owner cannot read or delete
-  another owner's run.
-- Citation identity, research-off boundaries, cancellation, deletion tombstones,
-  retention, encrypted backup/restore, alert inputs and the Compose lifecycle.
-- 38 snapshot evaluation cases (32 valid briefs and 6 expected rejections) pass
-  through the production graph assembly path; the result is pinned in the
-  committed baseline.
+| Path | Contents |
+|---|---|
+| `src/agentwriter/` | Application, browser workspace, writing workflow and worker |
+| `migrations/` | PostgreSQL schema migrations |
+| `tests/` | Unit and integration tests |
+| `evaluation/` | Versioned editorial rubric and regression corpus |
+| `scripts/` | Development and verification tools |
+| `ops/` | Monitoring and maintenance service definitions |
+| `docs/` | Product and operating guides |
+| `assets/` | Product screenshots |
 
-## Boundaries
+## Help and feedback
 
-This repository is not a qualified production release. The following remain
-unverified or blocked until real accounts, infrastructure or human reviewers are
-available:
+Start with [troubleshooting](docs/user-guide.md#troubleshooting) for common issues.
+For a bug or feature request, [open an issue](https://github.com/BatuhanYilmaz26/Agent-Writer/issues).
+Include the steps to reproduce and what you expected. Leave out API keys,
+connection strings and private draft content.
 
-- live OpenRouter account qualification; changed Treg accounts/routes need requalification;
-- hosted OIDC identity (the API fails closed for `AUTH_MODE=oidc`);
-- human factual/editorial review and judge agreement;
-- deployed load, fault-injection and release acceptance;
-- a manual screen-reader pass before a public release.
-
-The local profile binds to loopback, uses local single-owner authentication and
-makes no live provider calls. Do not expose it as a public service. Keep `.env`,
-credentials, backups and `.local/` artifacts out of Git.
+Maintained by [@BatuhanYilmaz26](https://github.com/BatuhanYilmaz26).

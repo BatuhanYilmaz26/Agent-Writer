@@ -24,7 +24,9 @@ TEST_DSN = os.environ.get("TEST_DATABASE_URL")
 
 
 @asynccontextmanager
-async def scoped_database(*, setup_saver: bool = True) -> AsyncIterator[str]:
+async def scoped_database(
+    *, setup_saver: bool = True, migrations_directory: Path = MIGRATIONS,
+) -> AsyncIterator[str]:
     """Create an isolated schema and drop it afterwards."""
     if not TEST_DSN:
         pytest.skip(
@@ -44,7 +46,7 @@ async def scoped_database(*, setup_saver: bool = True) -> AsyncIterator[str]:
         )
     )
     try:
-        await migrate(scoped_url, MIGRATIONS, setup_saver=setup_saver)
+        await migrate(scoped_url, migrations_directory, setup_saver=setup_saver)
         yield scoped_url
     finally:
         await admin.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(sql.Identifier(schema)))

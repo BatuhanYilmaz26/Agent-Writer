@@ -225,14 +225,19 @@ class Repository:
             )
             return result.rowcount
 
-    async def create_run(self, owner: str, request: dict, idempotency_key: str) -> dict:
+    async def create_run(
+        self, owner: str, request: dict, idempotency_key: str,
+        *, review_of: tuple[str, str, str] | None = None,
+    ) -> dict:
         if not 1 <= len(idempotency_key) <= 200 or not idempotency_key.isascii():
             raise StorageError(
                 "invalid_idempotency_key", "Use an ASCII idempotency key of 1–200 characters", 422
             )
         if not owner or len(owner) > 255:
             raise StorageError("invalid_principal", "Invalid authenticated principal", 401)
-        digest = canonical_hash(request)
+        digest = canonical_hash(request if review_of is None else {
+            "kind": "revision_review", "subject": review_of, "request": request,
+        })
         async with self.pool.connection() as connection, connection.transaction():
             # Admission is deliberately serialized initially: user/global caps
             # must not be defeated by concurrent submissions on several APIs.
@@ -261,6 +266,30 @@ class Repository:
                         "idempotency_conflict", "This key was used for a different writing brief"
                     )
                 return _public(existing)
+            revision_id = None
+            if review_of is not None:
+                subject_run, subject_revision, expected_hash = review_of
+                parent = await self._owned(connection, owner, subject_run, lock=True)
+                if (parent["kind"] != "generation" or parent["state"] not in TERMINAL_STATES
+                        or parent["current_revision"] != _uuid(subject_revision)):
+                    raise StorageError("revision_conflict", "Select the latest saved revision before requesting a review.")
+                revision = await (await connection.execute(
+                    "SELECT * FROM article_revisions WHERE id=%s AND run_id=%s",
+                    (_uuid(subject_revision), _uuid(subject_run)),
+                )).fetchone()
+                if (revision is None or revision["author_type"] != "human"
+                        or revision["content_hash"] != expected_hash):
+                    raise StorageError("revision_conflict", "The saved revision no longer matches this review request.")
+                active = await (await connection.execute(
+                    "SELECT id FROM runs WHERE review_revision_id=%s AND deleted_at IS NULL AND state=ANY(%s)",
+                    (_uuid(subject_revision), list(NONTERMINAL_STATES)),
+                )).fetchone()
+                if active:
+                    raise StorageError("review_pending", "A review is already queued for this saved revision.")
+                revision_id = _uuid(subject_revision)
+                await connection.execute(
+                    "UPDATE runs SET updated_at=clock_timestamp() WHERE id=%s", (_uuid(subject_run),),
+                )
             counts = await (
                 await connection.execute(
                     "SELECT count(*) AS total,count(*) FILTER (WHERE owner_id=%s) AS owned "
@@ -276,8 +305,8 @@ class Repository:
             run_id = uuid4()
             row = await (
                 await connection.execute(
-                    "INSERT INTO runs(id,owner_id,request,request_hash,deadline_at,graph_version) "
-                    "VALUES (%s,%s,%s,%s,clock_timestamp()+(%s*interval '1 second'),%s) RETURNING *",
+                    "INSERT INTO runs(id,owner_id,request,request_hash,deadline_at,graph_version,kind,review_revision_id) "
+                    "VALUES (%s,%s,%s,%s,clock_timestamp()+(%s*interval '1 second'),%s,%s,%s) RETURNING *",
                     (
                         run_id,
                         owner,
@@ -285,6 +314,8 @@ class Repository:
                         digest,
                         self.max_run_seconds,
                         self.graph_version,
+                        "revision_review" if review_of else "generation",
+                        revision_id,
                     ),
                 )
             ).fetchone()
@@ -298,6 +329,15 @@ class Repository:
             assert row is not None
             row["next_event_sequence"] = 1
             return _public(row)
+
+    async def create_revision_review(
+        self, owner: str, run_id: str, revision_id: str, expected_hash: str, idempotency_key: str,
+    ) -> dict:
+        parent = await self.get_run(owner, run_id)
+        return await self.create_run(
+            owner, parent["request"], idempotency_key,
+            review_of=(run_id, revision_id, expected_hash),
+        )
 
     async def get_run(self, owner: str, run_id: str) -> dict:
         async with self.pool.connection() as connection:
@@ -332,7 +372,19 @@ class Repository:
                 )
             ).fetchone()
             assert row is not None
-            return dict(row)
+            result = dict(row)
+            assessment = await (await connection.execute(
+                "SELECT claims FROM revision_assessments a JOIN runs j ON j.id=a.review_run_id "
+                "WHERE a.revision_id=(SELECT current_revision FROM runs WHERE id=%s) "
+                "AND j.deleted_at IS NULL ORDER BY a.created_at DESC,a.review_run_id DESC LIMIT 1",
+                (_uuid(run_id),),
+            )).fetchone()
+            if assessment:
+                result["unsupported_claims"] = sum(
+                    item.get("assessment") in {"unsupported", "conflicting"}
+                    for item in assessment["claims"]
+                )
+            return result
 
     async def list_runs(
         self, owner: str, *, limit: int = 20, before: str | None = None
@@ -341,7 +393,7 @@ class Repository:
             raise StorageError("invalid_limit", "Page size must be between 1 and 100", 422)
         async with self.pool.connection() as connection:
             params: list[Any] = [owner]
-            query = "SELECT * FROM runs WHERE owner_id=%s AND deleted_at IS NULL"
+            query = "SELECT * FROM runs WHERE owner_id=%s AND deleted_at IS NULL AND kind='generation'"
             if before:
                 cursor = await self._owned(connection, owner, before)
                 query += " AND (accepted_at,id)<(%s,%s)"
@@ -411,6 +463,17 @@ class Repository:
                 (state, _uuid(run_id)),
             )
             await self._event(connection, run_id, "deleted", {"state": state}, "deleted")
+            # Deleting an article also stops its otherwise hidden review jobs.
+            if run["kind"] == "generation":
+                reviews = await (await connection.execute(
+                    "UPDATE runs SET state=CASE WHEN state IN ('queued','retry_wait') THEN 'cancelled' "
+                    "WHEN state IN ('running','cancel_requested') THEN 'cancel_requested' ELSE state END,"
+                    "deleted_at=clock_timestamp(),updated_at=clock_timestamp() "
+                    "WHERE review_revision_id IN (SELECT id FROM article_revisions WHERE run_id=%s) "
+                    "AND deleted_at IS NULL RETURNING id,state", (_uuid(run_id),),
+                )).fetchall()
+                for review in reviews:
+                    await self._event(connection, review["id"], "deleted", {"state": review["state"]}, "deleted")
 
     async def sources(
         self, owner: str, run_id: str, *, limit: int = 100, offset: int = 0
@@ -447,6 +510,20 @@ class Repository:
             ).fetchall()
             result = _public(row)
             result["claims"] = [dict(item["assessment"], claim_id=item["claim_id"]) for item in claims]
+            assessment = await (await connection.execute(
+                "SELECT a.* FROM revision_assessments a JOIN runs j ON j.id=a.review_run_id "
+                "WHERE a.revision_id=%s AND a.content_hash=%s AND j.deleted_at IS NULL "
+                "ORDER BY a.created_at DESC,a.review_run_id DESC LIMIT 1", (selected, row["content_hash"]),
+            )).fetchone()
+            result["assessment"] = _public(assessment) if assessment else None
+            if assessment:
+                result["claims"] = _public(assessment["claims"])
+            job = await (await connection.execute(
+                "SELECT id,state,error_code,error_message,model_call_count,accepted_at FROM runs "
+                "WHERE review_revision_id=%s AND deleted_at IS NULL "
+                "ORDER BY accepted_at DESC,id DESC LIMIT 1", (selected,),
+            )).fetchone()
+            result["assessment_job"] = _public(job) if job else None
             return result
 
     async def list_revisions(self, owner: str, run_id: str, *, limit: int = 50) -> list[dict]:
@@ -457,8 +534,11 @@ class Repository:
             return _public(
                 await (
                     await connection.execute(
-                        "SELECT id,parent_revision,content_hash,review_status,author_type,created_at "
-                        "FROM article_revisions WHERE run_id=%s ORDER BY created_at DESC,id DESC LIMIT %s",
+                        "SELECT a.id,a.parent_revision,a.content_hash,a.review_status,a.author_type,a.created_at,"
+                        "(SELECT v.review_status FROM revision_assessments v JOIN runs j ON j.id=v.review_run_id "
+                        "WHERE v.revision_id=a.id AND j.deleted_at IS NULL "
+                        "ORDER BY v.created_at DESC,v.review_run_id DESC LIMIT 1) AS assessment_status "
+                        "FROM article_revisions a WHERE a.run_id=%s ORDER BY a.created_at DESC,a.id DESC LIMIT %s",
                         (_uuid(run_id), limit),
                     )
                 ).fetchall()
@@ -513,6 +593,59 @@ class Repository:
                 f"edit:{revision_id}",
             )
             return _public(row)
+
+    async def review_subject(self, claim: Claim) -> dict:
+        async with self.pool.connection() as connection:
+            row = await (await connection.execute(
+                "SELECT a.*,r.owner_id,r.request,r.policy,r.id AS subject_run_id "
+                "FROM article_revisions a JOIN runs r ON r.id=a.run_id "
+                "WHERE a.id=%s AND r.owner_id=%s AND r.deleted_at IS NULL AND r.kind='generation'",
+                (claim.run.get("review_revision_id"), claim.run["owner_id"]),
+            )).fetchone()
+            if row is None:
+                raise StorageError("review_subject_missing", "The saved revision is no longer available.", 404)
+            if markdown_hash(row["markdown"]) != row["content_hash"]:
+                raise StorageError("review_integrity_mismatch", "The saved revision failed its integrity check.")
+            excerpts = await (await connection.execute(
+                "SELECT id,excerpt_data FROM evidence_excerpts WHERE run_id=%s ORDER BY id LIMIT 100",
+                (row["subject_run_id"],),
+            )).fetchall()
+            return {"article": _public(row), "excerpts": {
+                item["id"]: item["excerpt_data"] for item in excerpts
+            }}
+
+    async def finalize_review(self, claim: Claim, review: dict, claims: list[dict]) -> dict:
+        subject = await self.review_subject(claim)
+        article = subject["article"]
+        if review.get("assessed_hash") != article["content_hash"]:
+            raise StorageError("review_revision_mismatch", "The review did not match the saved revision.")
+        status = "approved" if review["approved"] else "needs_review"
+        state = "succeeded" if review["approved"] else "needs_review"
+        async with self.pool.connection() as connection, connection.transaction():
+            await self._owned(connection, claim.run["owner_id"], article["subject_run_id"], lock=True)
+            current = await self._fence(connection, claim)
+            if current["review_revision_id"] != _uuid(article["id"]):
+                raise StorageError("review_revision_mismatch", "The review subject changed.")
+            result = await (await connection.execute(
+                "INSERT INTO revision_assessments(review_run_id,revision_id,content_hash,review_status,review,claims) "
+                "VALUES (%s,%s,%s,%s,%s,%s) RETURNING *",
+                (_uuid(claim.run_id), _uuid(article["id"]), article["content_hash"], status,
+                 Jsonb(review), Jsonb(claims)),
+            )).fetchone()
+            await connection.execute(
+                "UPDATE runs SET state=%s,updated_at=clock_timestamp(),error_code=NULL,error_message=NULL WHERE id=%s",
+                (state, _uuid(claim.run_id)),
+            )
+            await self._event(connection, claim.run_id, "completed", {
+                "state": state, "assessed_revision_id": article["id"], "review_status": status,
+            }, "terminal")
+            await self._event(connection, article["subject_run_id"], "revision_reviewed", {
+                "revision_id": article["id"], "review_status": status, "review_run_id": claim.run_id,
+            }, f"review:{claim.run_id}")
+            await connection.execute(
+                "UPDATE jobs SET lease_owner=NULL,lease_expires_at=NULL WHERE run_id=%s", (_uuid(claim.run_id),),
+            )
+            return _public(result)
 
     async def _fence(
         self,
@@ -901,9 +1034,11 @@ class Repository:
                 await connection.execute(
                     "SELECT r.id FROM runs r WHERE r.state=ANY(%s) AND r.updated_at<"
                     "clock_timestamp()-(%s*interval '1 day') AND EXISTS "
-                    "(SELECT 1 FROM sources s WHERE s.run_id=r.id) "
+                    "(SELECT 1 FROM sources s WHERE s.run_id=r.id) AND NOT EXISTS "
+                    "(SELECT 1 FROM runs q JOIN article_revisions a ON a.id=q.review_revision_id "
+                    "WHERE a.run_id=r.id AND q.state=ANY(%s)) "
                     "ORDER BY r.updated_at LIMIT %s FOR UPDATE SKIP LOCKED",
-                    (list(TERMINAL_STATES), source_retention_days, batch_size),
+                    (list(TERMINAL_STATES), source_retention_days, list(NONTERMINAL_STATES), batch_size),
                 )
             ).fetchall()
             for row in old_sources:
@@ -930,9 +1065,11 @@ class Repository:
                         "DELETE FROM idempotency_keys WHERE run_id=%s", (_uuid(run_id),)
                     )
                     result = await connection.execute(
-                        "DELETE FROM runs WHERE id=%s AND state=ANY(%s) "
-                        + ("AND deleted_at IS NOT NULL" if kind == "deleted" else ""),
-                        (_uuid(run_id), list(TERMINAL_STATES)),
+                        "DELETE FROM runs r WHERE id=%s AND state=ANY(%s) "
+                        + (f"AND deleted_at<{cutoff} " if kind == "deleted" else f"AND updated_at<{cutoff} ")
+                        + "AND NOT EXISTS (SELECT 1 FROM runs q JOIN article_revisions a ON a.id=q.review_revision_id "
+                        "WHERE a.run_id=r.id AND q.state=ANY(%s))",
+                        (_uuid(run_id), list(TERMINAL_STATES), list(NONTERMINAL_STATES)),
                     )
                     removed[count_key] += result.rowcount
         return removed
@@ -944,9 +1081,11 @@ class Repository:
         async with self.pool.connection() as connection:
             rows = await (
                 await connection.execute(
-                    f"SELECT id FROM runs WHERE state=ANY(%s) AND {condition}{cutoff} "
+                    f"SELECT id FROM runs r WHERE state=ANY(%s) AND {condition}{cutoff} "
+                    "AND NOT EXISTS (SELECT 1 FROM runs q JOIN article_revisions a ON a.id=q.review_revision_id "
+                    "WHERE a.run_id=r.id AND q.state=ANY(%s)) "
                     "ORDER BY updated_at LIMIT %s",
-                    (list(TERMINAL_STATES), limit),
+                    (list(TERMINAL_STATES), list(NONTERMINAL_STATES), limit),
                 )
             ).fetchall()
             return [str(row["id"]) for row in rows]

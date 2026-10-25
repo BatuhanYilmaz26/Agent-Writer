@@ -134,6 +134,24 @@ Human edits:
 - are marked **unassessed**;
 - never inherit an earlier approval.
 
+Choose **Review saved revision** to request a fresh assessment of your latest
+saved edit. The review runs in the background and leaves the Markdown unchanged.
+Its findings belong to that revision and hash. You can keep editing while it
+runs; a newer save starts unassessed and does not inherit the result. Select the
+older revision to read its assessment later.
+
+The review uses the configured model and consumes its quota. It makes at most
+two model requests, including an optional schema repair, and does not fetch new
+research or rewrite the draft. **Cancel review** stops further accepted work;
+an in-flight request can still consume quota. Fixture reviews are synthetic,
+and drafts in other languages continue to require your fluency review.
+
+If stored evidence has expired or the edit introduces facts that need sources,
+the assessment calls this out. Start a researched draft to gather fresh evidence.
+If a worker is interrupted after dispatch, the review stops rather than silently
+repeating a request with an unknown outcome. Request another review explicitly
+when you are ready.
+
 If the article changed while you were editing, the app preserves your text and
 offers **Reload latest draft**, **Save my text on the latest draft** or **Copy my
 text**. The revision chooser lists generated and human revisions with type, review
@@ -242,4 +260,4 @@ external font or icon service is contacted when you use the app.
 
 The local profile binds to loopback and must not be exposed publicly. Hosted OIDC,
 live provider qualification and human factual review are separate gates; see the
-root [README](../README.md#boundaries).
+root [README](../README.md#local-use-and-providers).
