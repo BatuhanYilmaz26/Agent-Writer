@@ -253,19 +253,21 @@ The versioned snapshot corpus runs the production graph assembly with fixture
 providers. It needs no database or network:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\evaluate.py --baseline evaluation\corpus\v1\baseline.json
+.\.venv\Scripts\python.exe scripts\evaluate.py --baseline evaluation\corpus\v2\baseline.json
 ```
 
 ```bash
-.venv/bin/python scripts/evaluate.py --baseline evaluation/corpus/v1/baseline.json
+.venv/bin/python scripts/evaluate.py --baseline evaluation/corpus/v2/baseline.json
 ```
 
-The accepted result is 38/38 cases and 346/346 checks with result hash
-`1cf921c8b8e5f6759e6331e8b97d1a6d726dd2acf8d1eaae76242e4fa4a989f3`. The
+The accepted result is 50/50 cases and 466/466 checks with result hash
+`21bb9e5aba1732f657c54664ccfda0f76c45db5c10874359c1bf83e258e05ef5`. The
 baseline comparison fails if the result changes. Do not edit the baseline
-without reviewing the change. The 16 source-dependent entries in `live.jsonl`
+without reviewing the change. The 28 source-dependent entries in `live.jsonl`
 are not executed by the fixture evaluator; they require qualified live
 providers.
+
+Corpus v2 covers the 200-word minimum and twelve concise technical publishing cases. The historical v1 corpus retains its earlier 500-word contract; its baseline is not the current acceptance target. Neither fixture corpus establishes live writing quality.
 
 A database-free smoke test proves the packaged fixture entry point, synthetic
 disclosure and citation marker:

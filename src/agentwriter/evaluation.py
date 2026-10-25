@@ -27,10 +27,10 @@ from agentwriter.domain import CreateRunRequest
 from agentwriter.graph import build_graph, initial_state, make_fixture_dependencies
 from agentwriter.services.citations import CitationError, validate_citations
 
-EVALUATOR_VERSION = "1.0.0"
+EVALUATOR_VERSION = "2.0.0"
 GRAPH_VERSION = "v1"
 DISCLOSURE = "> Synthetic development draft. No live model or web research was used."
-DEFAULT_CORPUS = Path(__file__).resolve().parents[2] / "evaluation" / "corpus" / "v1"
+DEFAULT_CORPUS = Path(__file__).resolve().parents[2] / "evaluation" / "corpus" / "v2"
 REQUIRED_FILES = ("briefs.jsonl", "live.jsonl", "rubric.md")
 
 

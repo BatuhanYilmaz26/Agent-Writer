@@ -1,0 +1,4 @@
+# Corpus manifests hash exact bytes on Windows and Linux.
+/evaluation/corpus/** text eol=lf
+# Preserve reviewed upstream bytes and their per-file hashes.
+/src/agentwriter/_vendor/** -text

@@ -52,7 +52,7 @@ class ClaimAssessment:
             "score": self.score,
             "reason": self.reason,
             "assessor": "lexical-v1",
-            "assessor_version": "1",
+            "assessor_version": "2",
         }
 
 
@@ -66,7 +66,19 @@ def _field(value: Any, name: str) -> Any:
 
 
 def _sentences(paragraph: str) -> list[str]:
-    return [part.strip() for part in re.split(r"(?<=[.!?])\s+", paragraph) if part.strip()]
+    sentences: list[str] = []
+    for part in re.split(r"(?<=[.!?])\s+", paragraph):
+        part = part.strip()
+        # Writers commonly place citations after punctuation. Bind leading
+        # markers to the preceding sentence rather than discarding them as an
+        # empty claim (or incorrectly attaching them to the next sentence).
+        leading = re.match(r"^(?:\[@[A-Za-z][A-Za-z0-9_.:-]{0,79}\]\s*)+", part)
+        if leading and sentences:
+            sentences[-1] += " " + leading[0].strip()
+            part = part[leading.end():].strip()
+        if part:
+            sentences.append(part)
+    return sentences
 
 
 def assess_claim(

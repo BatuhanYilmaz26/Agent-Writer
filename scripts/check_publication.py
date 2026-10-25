@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 PUBLIC_DOCUMENTS = frozenset({
     "readme.md", "docs/user-guide.md", "docs/setup-and-operations.md",
     "docs/configuration.md", "docs/workflow.md", "docs/providers.md", "docs/budgets.md",
-    "evaluation/corpus/v1/rubric.md",
+    "evaluation/corpus/v1/rubric.md", "evaluation/corpus/v2/rubric.md",
 })
 PRIVATE_PARTS = frozenset({
     ".local", ".secrets", ".venv", "venv", ".agents", ".codex", ".opencode",

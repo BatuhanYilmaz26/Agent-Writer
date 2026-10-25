@@ -1,0 +1,63 @@
+{
+  "corpus_version": "2.0.0",
+  "evaluator_version": "2.0.0",
+  "graph_version": "v1",
+  "result_hash": "21bb9e5aba1732f657c54664ccfda0f76c45db5c10874359c1bf83e258e05ef5",
+  "summary": {
+    "total_entries": 50,
+    "valid_cases": 44,
+    "rejection_cases": 6,
+    "passed": 50,
+    "failed": 0,
+    "all_passed": true,
+    "checks_total": 466,
+    "checks_passed": 466,
+    "categories": {
+      "adversarial_rejection_empty_topic": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_rejection_oversized_instructions": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_rejection_research_off_current": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_rejection_research_off_named": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_rejection_too_long": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_rejection_too_short": {
+        "total": 1,
+        "passed": 1
+      },
+      "adversarial_valid": {
+        "total": 8,
+        "passed": 8
+      },
+      "creative_off": {
+        "total": 8,
+        "passed": 8
+      },
+      "general_off": {
+        "total": 8,
+        "passed": 8
+      },
+      "source_required": {
+        "total": 8,
+        "passed": 8
+      },
+      "technical_publishing": {
+        "total": 12,
+        "passed": 12
+      }
+    }
+  },
+  "note": "Version 2 adds 200-word minimum and twelve technical-publishing fixtures. V1 is retained as historical evidence. Snapshot cases prove mechanics, not live content quality."
+}

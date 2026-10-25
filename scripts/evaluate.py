@@ -3,7 +3,7 @@
 This wrapper keeps the documented command working from a fresh checkout without
 requiring an editable install:
 
-    python scripts/evaluate.py --baseline evaluation/corpus/v1/baseline.json
+    python scripts/evaluate.py --baseline evaluation/corpus/v2/baseline.json
 """
 
 from __future__ import annotations

@@ -65,7 +65,7 @@ jobs:
         run: python scripts/smoke.py
 
       - name: Versioned fixture evaluation
-        run: python scripts/evaluate.py --baseline evaluation/corpus/v1/baseline.json --output .local/evaluation.json
+        run: python scripts/evaluate.py --baseline evaluation/corpus/v2/baseline.json --output .local/evaluation.json
 
       - name: Full test suite against disposable PostgreSQL
         run: python -B -m pytest -q -p no:cacheprovider --tb=short

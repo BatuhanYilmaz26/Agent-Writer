@@ -1,0 +1,87 @@
+{
+  "corpus_version": "2.0.0",
+  "created_at": "2026-10-25",
+  "snapshot_only": true,
+  "counts": {
+    "snapshot_entries": 50,
+    "valid_snapshot_briefs": 44,
+    "expected_rejections": 6,
+    "live_entries_not_executed": 28
+  },
+  "distribution": {
+    "adversarial_rejection_empty_topic": 1,
+    "adversarial_rejection_oversized_instructions": 1,
+    "adversarial_rejection_research_off_current": 1,
+    "adversarial_rejection_research_off_named": 1,
+    "adversarial_rejection_too_long": 1,
+    "adversarial_rejection_too_short": 1,
+    "adversarial_valid": 8,
+    "creative_off": 8,
+    "general_off": 8,
+    "source_required": 8,
+    "technical_publishing": 12
+  },
+  "target_word_bands": {
+    "199": 1,
+    "200": 4,
+    "350": 4,
+    "500": 4,
+    "550": 4,
+    "600": 4,
+    "700": 4,
+    "800": 10,
+    "900": 4,
+    "1000": 5,
+    "1200": 5,
+    "4000": 1
+  },
+  "files": {
+    "briefs.jsonl": {
+      "sha256": "86a7307565049fa70dc69e925a64f3b672724de4159317a3185a3cc119e2e88e",
+      "entries": 50
+    },
+    "live.jsonl": {
+      "sha256": "0d1d5a0d1bba8bfe78bcd1684ee8595397448aba6797b43ca9d893e60cb14a3a",
+      "entries": 28
+    },
+    "rubric.md": {
+      "sha256": "99cbb2a1d4caab2243b295ef0816cff6e913726fda27c73eb6748f5ea287bd16",
+      "version": "2.0.0"
+    }
+  },
+  "editorial_rubric": {
+    "file": "rubric.md",
+    "version": "2.0.0",
+    "pass_mean": 3.5,
+    "minimum_dimension": 3,
+    "evidence_integrity_source_required": 4,
+    "safety_minimum": 4
+  },
+  "human_sampling": {
+    "population": 44,
+    "sample_size": 10,
+    "fraction": 0.22727272727272727,
+    "strata": {
+      "creative_off": 2,
+      "general_off": 2,
+      "source_required": 2,
+      "adversarial_valid": 2,
+      "technical_publishing": 2
+    },
+    "reviewers": 2,
+    "blind": true,
+    "denominator": "10 sampled briefs x 2 reviewers = 20 independent reviews; agreement is reported per stratum and overall",
+    "agreement_target": "Cohen's kappa >= 0.60; differences above one point are adjudicated",
+    "status": "Deferred for personal localhost use; no human-review results are claimed"
+  },
+  "snapshot_live_boundary": "briefs.jsonl is deterministic fixture evidence only. live.jsonl requires qualified OpenRouter and Treg credentials, ENABLE_EXTERNAL_CALLS=true, budget policy and separately authorized live editorial review; the fixture evaluator never executes it.",
+  "adversarial_set": [
+    "prompt injection in topic and instructions",
+    "conflicting numeric claims",
+    "long source-dependent brief",
+    "named vendor/model",
+    "legal, medical and financial sensitivity",
+    "boundary validation rejections (empty, short, long, oversized instructions, research-off)"
+  ],
+  "case_hash": "2782fdaaad33de21cfe5c2d23cd80904f7353eba8c25354aca6768f8c21c3bde"
+}

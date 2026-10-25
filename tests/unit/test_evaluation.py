@@ -18,15 +18,15 @@ from agentwriter.evaluation import (
 
 def test_corpus_manifest_separates_snapshot_live_and_human_sampling() -> None:
     corpus = load_corpus(DEFAULT_CORPUS)
-    assert len(corpus.cases) == 38
-    assert len(corpus.live) == 16
-    assert corpus.manifest["corpus_version"] == "1.0.0"
+    assert len(corpus.cases) == 50
+    assert len(corpus.live) == 28
+    assert corpus.manifest["corpus_version"] == "2.0.0"
     assert corpus.manifest["snapshot_only"] is True
     assert corpus.manifest["counts"] == {
-        "snapshot_entries": 38,
-        "valid_snapshot_briefs": 32,
+        "snapshot_entries": 50,
+        "valid_snapshot_briefs": 44,
         "expected_rejections": 6,
-        "live_entries_not_executed": 16,
+        "live_entries_not_executed": 28,
     }
     assert corpus.manifest["human_sampling"]["sample_size"] == 10
     assert corpus.manifest["human_sampling"]["reviewers"] == 2
@@ -40,14 +40,14 @@ def test_corpus_manifest_separates_snapshot_live_and_human_sampling() -> None:
 async def test_every_snapshot_case_passes_and_matches_the_committed_baseline() -> None:
     result = await evaluate_snapshot(DEFAULT_CORPUS)
     summary = result["summary"]
-    assert summary["valid_cases"] == 32
+    assert summary["valid_cases"] == 44
     assert summary["rejection_cases"] == 6
     assert summary["checks_total"] == summary["checks_passed"]
     assert summary["failed"] == 0
     assert summary["all_passed"] is True
     assert result["mode"] == "snapshot_fixture"
     assert result["live"]["status"] == "not_executed"
-    assert len(result["cases"]) == 38
+    assert len(result["cases"]) == 50
     comparison = compare_baseline(result, DEFAULT_CORPUS / "baseline.json")
     assert comparison["passed"], comparison["differences"]
 
@@ -59,3 +59,10 @@ def test_modified_corpus_file_is_rejected_before_evaluation(tmp_path: Path) -> N
     briefs.write_text(briefs.read_text(encoding="utf-8") + "\n", encoding="utf-8")
     with pytest.raises(CorpusError, match="manifest hash"):
         load_corpus(copied)
+
+
+def test_historical_v1_corpus_is_retained_without_rewriting_its_contract():
+    historical = load_corpus(DEFAULT_CORPUS.parent / "v1")
+    assert historical.manifest["corpus_version"] == "1.0.0"
+    assert len(historical.cases) == 38
+    assert next(case for case in historical.cases if case.id == "qal-036").request["target_words"] == 400

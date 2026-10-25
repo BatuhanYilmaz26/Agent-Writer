@@ -117,3 +117,5 @@ opencode.local.jsonc
 
 # Public editorial rubric; corpus JSON/data stays versioned without Markdown.
 !/evaluation/corpus/v1/rubric.md
+
+!/evaluation/corpus/v2/rubric.md
