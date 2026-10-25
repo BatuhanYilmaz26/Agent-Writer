@@ -17,8 +17,9 @@ from datetime import UTC, datetime
 from agentwriter._vendor.twitter_text import parse_tweet
 from agentwriter.domain.models import markdown_hash
 from agentwriter.domain.publishing import PublicationRequest
+from agentwriter.services.discovery import article_discovery, plain_inline
+from agentwriter.services.markdown import markdown_html
 from agentwriter.services.technical import source_kind
-from agentwriter.services.urls import validate_public_url
 
 DISCLOSURES = {
     "en": "AI assistance was used to prepare this draft.",
@@ -45,70 +46,35 @@ def linkedin_count(text: str) -> int:
 
 
 def plain_markdown(markdown: str) -> str:
-    text = re.sub(r"\[([^\]]+)\]\(<?(https?://[^)>]+)>?\)", r"\1 (\2)", markdown)
-    text = re.sub(r"(?m)^\s{0,3}#{1,6}\s+", "", text)
-    text = re.sub(r"(?m)^>\s?", "", text)
-    return text.replace("```", "").replace("**", "").strip() + "\n"
+    lines = []
+    in_code = False
+    for line in markdown.splitlines():
+        if line.startswith("```"):
+            in_code = not in_code
+            continue
+        if in_code:
+            lines.append(line)  # Code operators/spacing must remain literal.
+            continue
+        line = re.sub(r"\[([^\]]+)\]\(<?(https?://[^)>]+)>?\)", r"\1 (\2)", line)
+        line = re.sub(r"^\s{0,3}#{1,6}\s+|^>\s?", "", line)
+        lines.append(plain_inline(line))
+    return "\n".join(lines).strip() + "\n"
 
 
 def article_html(markdown: str, title: str) -> str:
     """An escaped reading/copy artifact, never executable authored HTML."""
-    parts = []
-    code: list[str] | None = None
-    paragraph: list[str] = []
-
-    def inline(text: str) -> str:
-        parts: list[str] = []
-        start = 0
-        for match in re.finditer(r"\[([^\]]+)\]\(<?(https?://[^)>]+)>?\)", text):
-            parts.append(html.escape(text[start:match.start()]))
-            try:
-                url = validate_public_url(match[2])
-            except ValueError:
-                parts.append(html.escape(match[0]))
-            else:
-                parts.append('<a rel="noopener noreferrer" href="' + html.escape(url, quote=True) + '">' + html.escape(match[1]) + '</a>')
-            start = match.end()
-        parts.append(html.escape(text[start:]))
-        return "".join(parts)
-
-    def flush() -> None:
-        if paragraph:
-            parts.append("<p>" + "<br>".join(inline(line) for line in paragraph) + "</p>")
-            paragraph.clear()
-
-    for line in markdown.splitlines():
-        if line.startswith("```"):
-            flush()
-            if code is None:
-                code = []
-            else:
-                parts.append("<pre><code>" + html.escape("\n".join(code)) + "</code></pre>")
-                code = None
-        elif code is not None:
-            code.append(line)
-        elif match := re.match(r"^(#{1,3}) (.+)$", line):
-            flush()
-            level = len(match[1])
-            parts.append(f"<h{level}>" + html.escape(match[2]) + f"</h{level}>")
-        elif not line.strip():
-            flush()
-        else:
-            paragraph.append(line)
-    flush()
-    if code is not None:
-        parts.append("<pre><code>" + html.escape("\n".join(code)) + "</code></pre>")
     return ('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
             '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'none\'; base-uri \'none\'">'
-            "<title>" + html.escape(title) + "</title></head><body>" + "\n".join(parts) + "</body></html>")
+            "<title>" + html.escape(title) + "</title></head><body>" + markdown_html(markdown) + "</body></html>")
 
 
 def _paragraphs(raw: str) -> list[str]:
     # Do not turn code, headings or partial lines into factual social claims.
-    text = re.sub(r"```[\s\S]*?(?:```|$)", "", raw)
+    text = re.sub(r"(?m)^[^\n]{1,100}:\n\n?(?=```)", "", raw)
+    text = re.sub(r"```[\s\S]*?(?:```|$)", "", text)
     text = re.sub(r"\[@[^\]]+\]", "", text)
-    return [re.sub(r"\s+", " ", p).strip().replace("**", "") for p in text.split("\n\n")
-            if p.strip() and not p.lstrip().startswith(("#", ">", "-", "*", "|"))]
+    return [plain_inline(p) for p in text.split("\n\n")
+            if p.strip() and not re.match(r"^\s*(?:#|>|\||[-*]\s|\d+[.)]\s)", p)]
 
 
 def _extract_linkedin(paragraphs: list[str], title: str, link: str) -> str:
@@ -123,7 +89,9 @@ def _extract_linkedin(paragraphs: list[str], title: str, link: str) -> str:
             break
     caveat = next((p for p in paragraphs if CAVEAT.search(p) and p not in chosen), None)
     if caveat and len(caveat.split()) <= 55:
-        chosen = chosen[:max(1, len(chosen) - 1)] + [caveat]
+        # Keep a caveat together without repeating sentences already selected
+        # from that same paragraph.
+        chosen = [sentence for sentence in chosen if sentence not in caveat] + [caveat]
     result = "\n\n".join([title, *dict.fromkeys(chosen), *([link] if link else [])])
     while linkedin_count(result) > 3000 and chosen:
         chosen.pop()
@@ -161,8 +129,12 @@ def build_publication(article: dict, request: PublicationRequest, brief: dict) -
     sources = citation_map.get("sources", {})
     raw = citation_map.get("editable_markdown", article["markdown"])
     language = brief.get("language", "en")
-    title = re.search(r"(?m)^# (.+)$", raw)
-    title_text = title[1] if title else str(brief.get("topic", "Technical article"))[:240]
+    discovery = article_discovery(raw)
+    discovery.pop("headline_options")  # Unselected planning ideas stay in the private workspace.
+    title_text = discovery["title"] or str(brief.get("topic", "Technical article"))[:240]
+    discovery.update({"search_title": request.search_title or title_text,
+                      "search_description": request.search_description or discovery["description_suggestion"],
+                      "revision_id": article["id"], "content_hash": article["content_hash"]})
     references = [{key: source.get(key) for key in ("id", "title", "url", "published_at", "updated_at", "retrieved_at", "content_hash", "provider")}
                   for source in sources.values()]
     for reference in references:
@@ -198,6 +170,7 @@ def build_publication(article: dict, request: PublicationRequest, brief: dict) -
         "schema_version": 1, "revision_id": article["id"], "content_hash": article["content_hash"],
         "language": language, "editorial_profile": brief.get("editorial_profile", "standard"),
         "title": title_text, "created_at": datetime.now(UTC).isoformat(),
+        "discovery": discovery,
         "destinations": brief.get("destinations", ["medium", "linkedin", "x"]),
         "canonical_url": request.canonical_url, "disclosure": disclosure,
         "article_markdown": article["markdown"], "medium_markdown": medium,
@@ -208,7 +181,7 @@ def build_publication(article: dict, request: PublicationRequest, brief: dict) -
         "article_review_status": status, "synthetic": synthetic,
         "assessment_review_id": assessment.get("review_run_id") if assessment else None,
         "ready": all(checklist.values()) and status == "approved" and not synthetic,
-        "method": "extractive-v1; author-edited variants require independent review",
+        "method": "extractive-v2; author-edited variants require independent review",
         "policy_url": MEDIUM_POLICY,
     }
 
@@ -219,6 +192,8 @@ def publication_zip(package: dict) -> bytes:
     files = {"article-original.md": data["article_markdown"], "medium.md": data["medium_markdown"],
              "article.txt": data["article_text"], "article.html": data["article_html"],
              "references.json": json.dumps(data["references"], ensure_ascii=False, indent=2)}
+    if "discovery" in data:  # Older immutable packages retain their original contents.
+        files["discovery.json"] = json.dumps(data["discovery"], ensure_ascii=False, indent=2)
     if "linkedin" in data["destinations"]:
         files["linkedin.txt"] = data["linkedin_text"]
     if "x" in data["destinations"]:
@@ -227,7 +202,11 @@ def publication_zip(package: dict) -> bytes:
         "Review every claim, example, disclosure and platform variant before posting manually.\n"
         "article-original.md preserves the saved article bytes; medium.md adds the disclosure.\n"
         "Keep the disclosure near the beginning. Set your canonical URL in Medium if cross-posting.\n"
-        "No content has been posted by AgentWriter. Record your published URLs in the workspace.\n"
+        + ("discovery.json contains search metadata suggestions, not platform settings or factual approval.\n"
+           "Set title/description in your destination editor where supported, then inspect the preview.\n"
+           "Check headings, lists and code formatting after pasting into Medium. No ranking or AI citation is guaranteed.\n"
+           if "discovery" in data else "")
+        + "No content has been posted by AgentWriter. Record your published URLs in the workspace.\n"
         + ("WARNING: this package belongs to an older article revision.\n" if package.get("stale") else "")
         + "\n".join(data["warnings"]) + "\n" + MEDIUM_POLICY + "\n"
     )

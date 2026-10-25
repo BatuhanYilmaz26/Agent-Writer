@@ -18,6 +18,7 @@ every saved revision. You decide what is ready to publish.
 - **Find a timely topic.** Refresh publisher and research feeds on demand, inspect dates and sources, and spot ideas already used in your drafts.
 - **Work from your point of view.** Choose a concise technical profile, target length and research preference; add your angle, observations and primary sources.
 - **Keep evidence close.** Inspect source links, citation checks and claim-support findings alongside the draft.
+- **Sharpen the title.** Compare planning suggestions, edit the article headline and prepare revision-bound search metadata with practical reading notes.
 - **Edit with a history.** Save changes as new revisions, reopen earlier versions and download the exact Markdown you selected.
 - **Request a fresh review.** Assess a saved edit without rewriting it. The assessment belongs to that revision; later edits start unassessed.
 - **Prepare a publication bundle.** Edit LinkedIn/X extracts, check platform lengths, add an honest AI disclosure and export article text, HTML, Markdown and references. Posting stays in your hands.

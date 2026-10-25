@@ -136,3 +136,32 @@ async def test_five_language_articles_keep_exact_bytes_and_localized_disclosures
     archive = zipfile.ZipFile(io.BytesIO((await client.get(base + f"/packages/{package['id']}/download")).content))
     assert archive.read("article-original.md").decode() == article["markdown"]
     assert archive.read("medium.md").decode().startswith(DISCLOSURES[language])
+
+
+async def test_title_options_metadata_and_reading_notes_follow_saved_revision(api_client, acceptance_database):
+    client, _ = api_client
+    run_id = (await enqueue(client, key="discovery", editorial_profile="technical-v1", topic="RAG evaluation", target_words=350))["id"]
+    await run_one_fixture_job(acceptance_database)
+    base = f"/api/v1/runs/{run_id}"
+    generated = (await client.get(base + "/article")).json()
+    assert generated["discovery"]["headline_options"] == ["RAG evaluation"]
+    assert generated["discovery"]["title"] == "RAG evaluation"
+    changed = await client.post(base + "/revisions", json={"parent_revision": generated["id"], "markdown": "# Why RAG similarity misses answer quality\n\nEvaluate the answer against its evidence.\n\n## A practical check\n\nKeep the limitation beside the claim."})
+    assert changed.status_code == 201, changed.text
+    saved = (await client.get(base + "/article")).json()
+    assert saved["id"] != generated["id"] and saved["review_status"] == "unassessed"
+    assert saved["discovery"]["title"] == "Why RAG similarity misses answer quality"
+    assert saved["discovery"]["headline_options"] == generated["discovery"]["headline_options"]
+    route = base + f"/revisions/{saved['id']}/packages"
+    payload = {"content_hash": saved["content_hash"], "search_title": "RAG evaluation: evidence before similarity", "search_description": "A concrete answer-quality check and its limitation."}
+    first = (await client.post(route, json=payload)).json()
+    assert first["data"]["discovery"]["search_title"] == payload["search_title"]
+    second = (await client.post(route, json={**payload, "search_description": "A revised accurate summary."})).json()
+    assert second["id"] != first["id"]
+    old = (await client.get(base + f"/packages/{first['id']}")).json()
+    assert old["data"]["discovery"]["search_description"] == payload["search_description"]
+    archive = zipfile.ZipFile(io.BytesIO((await client.get(base + f"/packages/{second['id']}/download")).content))
+    metadata = json.loads(archive.read("discovery.json"))
+    assert metadata["content_hash"] == saved["content_hash"] and metadata["revision_id"] == saved["id"]
+    original = (await client.get(base + f"/article?revision={generated['id']}")).json()
+    assert original["discovery"]["title"] == "RAG evaluation"

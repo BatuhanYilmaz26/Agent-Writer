@@ -414,24 +414,26 @@ function safeExternalUrl(value) {
 }
 
 function appendInline(node, text) {
-  for (const part of String(text).split(/(\[@[A-Za-z][A-Za-z0-9_.:-]{0,79}\])/g)) {
-    const match = part.match(/^\[@(.+)\]$/);
-    const source = match ? state.ledger.get(match[1]) : null;
-    if (source) {
-      const href = safeExternalUrl(source.url);
-      if (!href) {
-        node.append(document.createTextNode(part));
-        continue;
-      }
-      const link = document.createElement("a");
-      link.href = href;
-      link.textContent = `[${source.title || source.url}]`;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      node.append(link);
-    } else {
-      node.append(document.createTextNode(part));
+  const tokens = /(`[^`\n]+`|\*\*[^*\n]+\*\*|(?<!\w)\*[^*\n]+\*|\[@[A-Za-z][A-Za-z0-9_.:-]{0,79}\]|\[[^\[\]\n]{1,240}\]\(<?https?:\/\/[^)\s]{1,2048}>?\))/g;
+  for (const part of String(text).split(tokens)) {
+    let tag = null;
+    let content = part;
+    if (/^`[^`]+`$/.test(part)) { tag = "code"; content = part.slice(1, -1); }
+    else if (/^\*\*[^*]+\*\*$/.test(part)) { tag = "strong"; content = part.slice(2, -2); }
+    else if (/^\*[^*]+\*$/.test(part)) { tag = "em"; content = part.slice(1, -1); }
+    if (tag) {
+      const element = document.createElement(tag); element.textContent = content; node.append(element); continue;
     }
+    const marker = part.match(/^\[@(.+)\]$/);
+    const reference = part.match(/^\[([^\]]+)\]\(<?(https?:\/\/[^)>]+)>?\)$/);
+    const source = marker ? state.ledger.get(marker[1]) : reference
+      ? [...state.ledger.values()].find((s) => safeExternalUrl(s.url) === safeExternalUrl(reference[2])) : null;
+    const href = source && safeExternalUrl(source.url);
+    if (href) {
+      const link = document.createElement("a"); link.href = href;
+      link.textContent = reference ? reference[1] : `[${source.title || source.url}]`;
+      link.target = "_blank"; link.rel = "noopener noreferrer"; node.append(link);
+    } else node.append(document.createTextNode(part));
   }
 }
 
@@ -485,6 +487,26 @@ export function renderMarkdown(root, text) {
       index += 1;
       continue;
     }
+    const cells = (value) => value.trim().replace(/^\||\|$/g, "").split("|").map((s) => s.trim());
+    const header = cells(line);
+    const separator = index + 1 < lines.length ? cells(lines[index + 1]) : [];
+    if (line.trim().startsWith("|") && header.length >= 2 && header.length <= 12
+        && separator.length === header.length && separator.every((s) => /^:?-{3,}:?$/.test(s))) {
+      flushParagraph(); flushList();
+      const wrap = document.createElement("div"); wrap.className = "article-table";
+      wrap.tabIndex = 0; wrap.setAttribute("role", "region"); wrap.setAttribute("aria-label", "Article comparison table");
+      const table = document.createElement("table");
+      const head = document.createElement("thead"); const row = document.createElement("tr");
+      for (const cell of header) { const th = document.createElement("th"); th.scope = "col"; appendInline(th, cell); row.append(th); }
+      head.append(row); table.append(head);
+      const body = document.createElement("tbody"); index += 2;
+      while (index < lines.length && lines[index].trim().startsWith("|") && cells(lines[index]).length === header.length) {
+        const row = document.createElement("tr");
+        for (const cell of cells(lines[index])) { const td = document.createElement("td"); appendInline(td, cell); row.append(td); }
+        body.append(row); index += 1;
+      }
+      table.append(body); wrap.append(table); root.append(wrap); continue;
+    }
     if (!line.trim()) {
       flushParagraph();
       flushList();
@@ -537,7 +559,7 @@ export function renderMarkdown(root, text) {
       continue;
     }
     if (!paragraph) paragraph = document.createElement("p");
-    else paragraph.append(document.createElement("br"));
+    else paragraph.append(document.createTextNode(" "));
     appendInline(paragraph, line);
     index += 1;
   }
@@ -1055,6 +1077,7 @@ function updateEditingControls() {
     ? "Select the latest revision before saving an edit."
     : "";
   updateReviewControls();
+  publishing?.update();
 }
 
 function renderRevisionOptions() {
@@ -1082,6 +1105,7 @@ function renderArticle() {
   // Preview the immutable stored revision, including any synthetic/partial
   // disclosure that must never be hidden by the editable body.
   renderMarkdown($("preview"), article.markdown);
+  renderDiscovery(article);
   renderReview(article);
   renderRevisionOptions();
   setDownload(article.id, article.content_hash);
@@ -1089,6 +1113,18 @@ function renderArticle() {
   updateEditingControls();
   $("conflict").hidden = state.conflictText === null;
   if (state.conflictText !== null) $("conflict-message").textContent = state.conflictText;
+}
+
+function renderDiscovery(article) {
+  const discovery = article.discovery || {};
+  $("article-headline").value = discovery.title || "";
+  $("headline-options").replaceChildren(new Option("Choose a planning suggestion", ""));
+  for (const title of discovery.headline_options || []) $("headline-options").append(new Option(title, title));
+  $("headline-options").disabled = !(discovery.headline_options || []).length;
+  $("discovery-notes").replaceChildren();
+  for (const tip of [...(discovery.tips || []), discovery.reminder].filter(Boolean)) {
+    const item = document.createElement("li"); item.textContent = tip; $("discovery-notes").append(item);
+  }
 }
 
 async function loadArticle(revisionId = null) {
@@ -1511,6 +1547,27 @@ function wireEvents() {
       event.preventDefault();
       selectTab(true);
     }
+  });
+  $("headline-options").addEventListener("change", () => {
+    if ($("headline-options").value) $("article-headline").value = $("headline-options").value;
+  });
+  $("apply-headline").addEventListener("click", () => {
+    const title = $("article-headline").value.replace(/[\r\n]/g, " ").trim();
+    if (!title || !state.article || state.saving || state.publicationDirty) {
+      announce("Enter a title and save any publication edits first."); return;
+    }
+    const lines = $("editor").value.split("\n");
+    let fenced = false;
+    let found = false;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith("```")) fenced = !fenced;
+      else if (!fenced && /^#\s+/.test(lines[i])) { lines[i] = `# ${title}`; found = true; break; }
+    }
+    if (!found) lines.unshift(`# ${title}`, "");
+    $("editor").value = lines.join("\n");
+    $("editor").dispatchEvent(new Event("input", { bubbles: true }));
+    editing(true);
+    announce("Title changed in the editor. Save a new revision, then review its promise against the body.");
   });
   $("editor").addEventListener("input", () => {
     state.editorDirty = true;

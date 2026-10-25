@@ -306,3 +306,32 @@ The package does not include private brief observations, credentials or configur
 ### Record where you published
 
 Publish manually on your chosen platform, then expand **Record a published link**. Enter its URL, platform and actual date/time. The workspace saves your report against the package and displays it when you reopen the draft. Recording a link makes no request to that platform and does not verify or publish its contents. Repeating the same link for the same package does not create another record. Future publication dates are rejected; this is a log, not a scheduling service.
+
+
+## Titles, search previews and readable technical articles
+
+Choose **Concise technical** for one focused practitioner article. The planning request asks for three different, descriptive title ideas in the article language. This uses the existing planning call, not an extra model request. Providers can omit suggestions, and older drafts may have none. Fixture mode supplies only the synthetic draft's existing title. Suggestions are starting points; they are not tested click-through predictions.
+
+Open **Title & reading notes** below the article. Select a suggestion or write your own title, then choose **Use title in editor**. This changes the first article heading in the Markdown editor while preserving the body. **Save new revision** preserves the change as a new, initially unassessed article. Review the title against the body before requesting another assessment. Original planning suggestions remain available after editing, so discard any that no longer fit.
+
+A useful technical title names the subject and the specific question or implication. For example, “RAG evaluation: why retrieval similarity is not answer quality” tells a reader what to expect without claiming an unmeasured improvement. Check every number, version, date and comparison in a headline against the article and its primary sources. Avoid exaggerated promises or an added year that makes unchanged information look new. [Google recommends descriptive, concise titles](https://developers.google.com/search/docs/appearance/title-link); it sets no fixed character limit, and displayed titles may be shortened or rewritten.
+
+The reading notes flag a few editing opportunities: long prose paragraphs, missing or skipped headings, and certain English hype or canned phrases. Their 90-word paragraph and 90-character title suggestions are local editorial heuristics, not search-engine rules. Code, quotes and simple table rows are excluded from prose-length notes. The checks do not assess fluency, prove factual accuracy or detect all formulaic writing. Add a useful observation, example or technical judgment you can stand behind. Never invent personal experiments to make a draft sound natural.
+
+### Search and AI discovery
+
+In **Prepare to publish → Search preview**, edit the search title and description. The initial description is extracted from the opening paragraph without inventing new facts; it can be blank when no suitable bounded opening exists. Keep its claim consistent with the article. Save the publication package to preserve these fields against that exact revision and hash. Editing metadata clears your fact-check attestation. The ZIP adds `discovery.json` with the selected metadata and reading notes. Unselected planning titles stay in the workspace; existing older packages retain their original contents.
+
+Copy this metadata into your destination's settings where supported and inspect the preview there. These fields do not update Medium, LinkedIn, X or Google. Medium also offers a separate [display title/subtitle](https://help.medium.com/hc/en-us/articles/214895188-Custom-titles-subtitles) for previews; it can differ from the article heading. The publishing host controls its page metadata, crawling, indexing and structured data. Search snippets and titles can differ from your suggestions.
+
+SEO, answer engine optimization (AEO) and generative engine optimization (GEO) share a practical foundation here: answer a real reader's question clearly, contribute useful analysis, identify technologies precisely, and make factual claims independently checkable. [Google's current AI-search guide](https://developers.google.com/search/docs/fundamentals/ai-optimization-guide) emphasizes original, useful content and ordinary SEO fundamentals. It does not require special AI markup, `llms.txt`, forced keyword variations or an ideal article length. [Bing's guidance](https://www.bing.com/webmasters/help/bing-webmaster-guidelines-30fba23a) likewise stresses clear structure, focused content and verifiable information. Inclusion, ranking, AI citations, views and clicks are not guaranteed.
+
+For current developments, read the linked primary announcement or documentation again before posting. Distinguish publication, update, retrieval and event dates; fetching a page today does not make its claims new. Keep version numbers, benchmark conditions and vendor/preprint limitations intact. A saved assessment uses stored evidence; it does not refresh the web. Start a newly researched draft when the evidence needs refreshing.
+
+### Technical article layout
+
+Start with a direct, useful opening, then use descriptive sections and short paragraphs. Use lists for parallel checks or steps, inline backticks for identifiers, fenced blocks for code and emphasis sparingly. Label unexecuted code as illustrative. Keep important caveats beside the claims they qualify. Add a comparison only when it saves the reader work; avoid filler FAQs, repeated summaries and keyword stuffing.
+
+The preview and portable HTML document support headings, bold/italic text, inline and fenced code, lists, quotes and basic pipe tables with 2–12 columns. Basic tables use a leading pipe and a separator row; embedded or escaped pipes and nested formatting are outside this small subset. Wide tables scroll within the preview. Raw authored HTML, scripts, images and embeds are never interpreted. In the workspace, only validated source-ledger links become clickable.
+
+Use the rendered HTML export as a copying aid, then check the destination editor. [Medium's editor](https://help.medium.com/hc/en-us/articles/215194537-Using-the-story-editor) supports headings, emphasis, lists, quotes and code, but pasting does not guarantee identical formatting. Reformat complex tables manually, or use a compact list. Keep AI-assistance disclosure visible and review the final draft on the platform before publishing.

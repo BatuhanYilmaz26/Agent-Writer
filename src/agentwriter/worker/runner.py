@@ -383,6 +383,7 @@ def _prepare_artifact(
         "sources": sources,
         "editable_markdown": raw,
         "research_limitations": values.get("research_limitations", []),
+        "headline_options": values.get("plan", {}).get("headline_options", []),
     }
     return {
         "markdown": markdown,

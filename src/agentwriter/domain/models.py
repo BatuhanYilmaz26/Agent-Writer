@@ -150,10 +150,18 @@ class SectionTask(DomainModel):
 
 class ContentPlan(DomainModel):
     title: ShortText
+    headline_options: Annotated[tuple[ShortText, ...], Field(max_length=5)] = ()
     audience: ShortText = "General readers"
     tone: ShortText = "clear"
     target_words: Annotated[int, Field(strict=True, ge=200, le=3000)]
     tasks: Annotated[tuple[SectionTask, ...], Field(min_length=2, max_length=8)]
+
+    @field_validator("headline_options")
+    @classmethod
+    def one_line_headlines(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if any("\n" in value or "\r" in value for value in values):
+            raise ValueError("Each headline must be one line")
+        return tuple(dict.fromkeys(values))
 
     @model_validator(mode="after")
     def complete_ordered_budget(self) -> ContentPlan:

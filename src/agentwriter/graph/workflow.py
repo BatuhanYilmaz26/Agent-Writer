@@ -271,6 +271,11 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
                 "between 50 and 2500; their sum must equal the plan target_words exactly. "
                 "Use unique task IDs and contiguous order values from 1 to the number of tasks. "
                 "Choose evidence_ids only from the supplied evidence keys; use empty arrays if there is no evidence."
+                " For the technical-v1 profile, provide three distinct headline_options in the article language: "
+                "a clear explanation, a practical implication, and a useful question where appropriate. "
+                "Each must accurately describe this same planned article, name its main subject and avoid "
+                "unsupported numbers, superlatives, current-year bait and exaggerated promises. "
+                "Use the strongest descriptive option as title. For other profiles, headline_options may be empty."
             ),
             {"brief": deps.request.model_dump(mode="json"), "evidence": state.get("excerpts", {}),
              "source_metadata": source_metadata(state.get("sources", {}))},
@@ -505,7 +510,8 @@ def make_fixture_dependencies(
     if len(title) > 240:
         title = title[:237].rstrip() + "..."
     responses: dict[str, dict[str, Any]] = {
-        "plan": {"title": title, "audience": request.audience, "tone": request.tone, "target_words": request.target_words, "tasks": tasks},
+        "plan": {"title": title, "headline_options": [title] if request.editorial_profile == "technical-v1" else [],
+                 "audience": request.audience, "tone": request.tone, "target_words": request.target_words, "tasks": tasks},
     }
     for revision in range(max_review_rounds + 1):
         for task in tasks:

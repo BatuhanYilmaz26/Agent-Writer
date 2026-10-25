@@ -38,6 +38,7 @@ from agentwriter.api.security import (
 from agentwriter.domain import TERMINAL_STATES, CreateRunRequest
 from agentwriter.domain.publishing import PublicationRecordRequest, PublicationRequest
 from agentwriter.services.citations import CitationError, render_citations, validate_citations
+from agentwriter.services.discovery import article_discovery
 from agentwriter.services.publishing import build_publication, publication_zip
 from agentwriter.services.technical import source_metadata
 from agentwriter.services.topics import collect_feeds, rank_topics
@@ -303,9 +304,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         owner: str = Depends(authenticated),
         revision: Annotated[UUID | None, Query()] = None,
     ):
-        return await request.app.state.repository.get_article(
+        saved = await request.app.state.repository.get_article(
             owner, run_id, str(revision) if revision is not None else None
         )
+        citation_map = saved.get("citation_map", {})
+        saved["discovery"] = article_discovery(
+            citation_map.get("editable_markdown", saved["markdown"]),
+            citation_map.get("headline_options", []),
+        )
+        return saved
 
     @app.get("/api/v1/runs/{run_id}/revisions")
     async def revisions(run_id: str, request: Request, owner: str = Depends(authenticated)):
@@ -322,9 +329,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run = await request.app.state.repository.get_run(owner, run_id)
         language = run["request"].get("language", "en")
         rendered = render_citations(change.markdown, sources_by_id, language=language)
+        parent = await request.app.state.repository.get_article(owner, run_id, str(change.parent_revision))
         return await request.app.state.repository.edit_article(
             owner, run_id, str(change.parent_revision), rendered,
-            citation_map={"sources": sources_by_id, "editable_markdown": change.markdown, "language": language},
+            citation_map={"sources": sources_by_id, "editable_markdown": change.markdown, "language": language,
+                          "headline_options": parent.get("citation_map", {}).get("headline_options", []),
+                          "research_limitations": parent.get("citation_map", {}).get("research_limitations", [])},
         )
 
     @app.post("/api/v1/runs/{run_id}/revisions/{revision_id}/reviews", status_code=202)

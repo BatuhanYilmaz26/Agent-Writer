@@ -18,6 +18,8 @@ class PublicationRequest(DomainModel):
     x_posts: Annotated[tuple[Annotated[str, StringConstraints(strict=True, max_length=5000)], ...], Field(min_length=1, max_length=5)] | None = None
     thread_length: Literal[1, 3, 4, 5] = 1
     disclosure: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=500)] | None = None
+    search_title: Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=300)] | None = None
+    search_description: Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=500)] | None = None
     facts_checked: bool = False
     voice_checked: bool = False
     language_checked: bool = False
@@ -29,11 +31,18 @@ class PublicationRequest(DomainModel):
     def safe_url(cls, value: str | None) -> str | None:
         return validate_public_url(value) if value else None
 
-    @field_validator("linkedin_text", "disclosure")
+    @field_validator("linkedin_text", "disclosure", "search_title", "search_description")
     @classmethod
     def valid_text(cls, value: str | None) -> str | None:
         if value is not None and (not value.strip() or any(0xD800 <= ord(c) <= 0xDFFF for c in value)):
             raise ValueError("Use nonblank Unicode text")
+        return value
+
+    @field_validator("search_title", "search_description")
+    @classmethod
+    def single_line_metadata(cls, value: str | None) -> str | None:
+        if value and ("\n" in value or "\r" in value):
+            raise ValueError("Use a single line for search metadata")
         return value
 
     @field_validator("x_posts")

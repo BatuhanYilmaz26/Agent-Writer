@@ -30,6 +30,8 @@ export function createPublishingController({ api, state, showError, announce }) 
     $("x-drafts").value = data.x_posts.join("\n---\n");
     $("publication-canonical").value = data.canonical_url || "";
     $("publication-disclosure").value = data.disclosure;
+    $("search-title").value = data.discovery?.search_title || data.title;
+    $("search-description").value = data.discovery?.search_description || "";
     for (const key of checks) $("publication-" + key).checked = !value.stale && Boolean(data.checklist[key]);
     $("publication-status").textContent = `${value.stale ? "Stale package: article or assessment changed. " : ""}${data.ready && !value.stale ? "Checklist complete. " : "Review required. "}LinkedIn ${data.counts.linkedin}/3,000 characters. X ${data.counts.x.map((p) => `${p.weighted_length}/280`).join(", ")}.`;
     $("publication-warnings").replaceChildren();
@@ -63,6 +65,8 @@ export function createPublishingController({ api, state, showError, announce }) 
     $("publication-drafts").hidden = true;
     $("publication-status").textContent = "Prepare platform drafts from this saved article. No model requests are needed.";
     $("publication-canonical").value = ""; $("publication-disclosure").value = "";
+    $("search-title").value = state.article.discovery?.title || "";
+    $("search-description").value = state.article.discovery?.description_suggestion || "";
     for (const key of checks) $("publication-" + key).checked = false;
     update();
     try {
@@ -85,7 +89,9 @@ export function createPublishingController({ api, state, showError, announce }) 
     const payload = { content_hash: state.article.content_hash,
       thread_length: Number($("publication-thread").value),
       canonical_url: $("publication-canonical").value.trim() || null,
-      disclosure: $("publication-disclosure").value.trim() || null };
+      disclosure: $("publication-disclosure").value.trim() || null,
+      search_title: $("search-title").value.trim() || null,
+      search_description: $("search-description").value.trim() || null };
     for (const key of checks) payload[key] = $("publication-" + key).checked;
     if (current && !replace) {
       payload.linkedin_text = $("linkedin-draft").value;
@@ -104,11 +110,12 @@ export function createPublishingController({ api, state, showError, announce }) 
 
   $("prepare-package").addEventListener("click", () => prepare());
   $("replace-extracts").addEventListener("click", () => prepare(true));
-  for (const id of ["linkedin-draft", "x-drafts", "publication-canonical", "publication-disclosure", "publication-thread", ...checks.map((key) => "publication-" + key)]) {
+  for (const id of ["linkedin-draft", "x-drafts", "publication-canonical", "publication-disclosure", "publication-thread", "search-title", "search-description", ...checks.map((key) => "publication-" + key)]) {
     $(id).addEventListener("input", () => {
       state.publicationDirty = true;
       if (["linkedin-draft", "x-drafts", "publication-canonical", "publication-thread"].includes(id)) $("publication-variants_checked").checked = false;
       if (["linkedin-draft", "x-drafts"].includes(id)) $("publication-facts_checked").checked = false;
+      if (["search-title", "search-description"].includes(id)) $("publication-facts_checked").checked = false;
       if (id === "publication-disclosure") $("publication-disclosure_checked").checked = false;
       update();
     });
