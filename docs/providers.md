@@ -34,8 +34,8 @@ router and actual returned model remain separate metadata.
 Budgeted configuration requires explicit model/provider allowlists and a
 positive reservation amount supplied by the trusted worker dispatch service.
 The adapter does not create a durable reservation or decide that a price is
-known. Do not enable paid calls until shared budget admission and account
-qualification are verified in the tracker.
+known. Before enabling paid calls, verify shared budget admission and record
+successful account qualification for that configuration.
 
 Failures use public-safe codes. The scheduler owns retry/backoff/deadline
 decisions; this transport never retries by itself. A rate-limit error preserves

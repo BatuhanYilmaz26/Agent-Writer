@@ -150,6 +150,75 @@ def test_evidence_pack_is_relevant_and_token_bounded() -> None:
     assert sum(max(1, (len(item["text"].encode()) + 3) // 4) for item in packed.values()) <= 40
 
 
+def test_first_oversized_excerpt_cannot_bypass_budget_or_hide_a_smaller_match():
+    oversized = excerpt("src_large", "relevant topic " * 1000)
+    small = excerpt("src_small", "relevant")
+    values = {"large": oversized, "small": small}
+    assert pack_evidence(values, "relevant topic", max_tokens=10, limit=1) == {"small": small}
+    assert pack_evidence({"large": oversized}, "relevant topic", max_tokens=10) == {}
+    assert oversized["content_hash"] == hashlib.sha256(oversized["text"].encode()).hexdigest()
+
+
+def test_pack_budget_counts_utf8_bytes_and_preserves_exact_boundary():
+    assert pack_evidence({"wide": {"text": "é" * 21}}, "é", max_tokens=10) == {}
+    exact = {"text": "é" * 20}
+    assert pack_evidence({"exact": exact}, "é", max_tokens=10) == {"exact": exact}
+
+
+@pytest.mark.parametrize("options", [
+    {"limit": 0}, {"limit": -1}, {"limit": 25}, {"limit": True},
+    {"max_tokens": 0}, {"max_tokens": 12001}, {"max_tokens": True},
+])
+def test_pack_rejects_invalid_bounds(options):
+    with pytest.raises(ValueError):
+        pack_evidence({}, "topic", **options)
+
+
+@pytest.mark.asyncio
+async def test_collection_bounds_total_evidence_without_changing_text_hashes_or_inputs():
+    pages = {}
+    results = []
+    for letter, text in (("a", "a" * 2400), ("b", "b" * 2400), ("c", "c" * 1024)):
+        url = f"https://example.org/{letter}"
+        pages[url] = {
+            "source": {"id": f"src_{letter}", "url": url},
+            "excerpt": excerpt(f"src_{letter}", text),
+        }
+        results.append({"url": url, "title": "Topic", "snippet": "topic"})
+    gateway = FakeResearch({"topic": results}, pages)
+    outcome = await ResearchCoordinator(
+        gateway, ResearchLimits(max_pages=3, max_evidence_tokens=1024),
+    ).collect(["topic"])
+    assert set(outcome.sources) == {"src_a", "src_c"}
+    assert outcome.truncated is True and outcome.limitations()
+    assert sum((len(item["text"].encode()) + 3) // 4 for item in outcome.excerpts.values()) == 856
+    for page in pages.values():
+        original = page["excerpt"]
+        assert original["flags"] == []
+        assert original["content_hash"] == hashlib.sha256(original["text"].encode()).hexdigest()
+        if original["id"] in outcome.excerpts:
+            selected = outcome.excerpts[original["id"]]
+            assert selected["text"] == original["text"]
+            assert selected["content_hash"] == original["content_hash"]
+            assert selected["locator"] == original["locator"]
+
+
+@pytest.mark.asyncio
+async def test_page_character_limit_drops_oversized_excerpt_without_invalidating_hash():
+    url = "https://example.org/large"
+    original = excerpt("src_a", "a" * 1001)
+    gateway = FakeResearch(
+        {"topic": [{"url": url, "title": "Topic"}]},
+        {url: {"source": {"id": "src_a"}, "excerpt": original}},
+    )
+    outcome = await ResearchCoordinator(
+        gateway, ResearchLimits(max_chars_per_page=1000),
+    ).collect(["topic"])
+    assert not outcome.sources and not outcome.excerpts and outcome.truncated
+    assert original["text"] == "a" * 1001 and original["flags"] == []
+    assert original["content_hash"] == hashlib.sha256(original["text"].encode()).hexdigest()
+
+
 def test_numeric_conflict_flags_both_excerpts() -> None:
     left = excerpt("src_a", "The release shipped 12 units to the same regional warehouse.")
     right = excerpt("src_b", "The release shipped 15 units to the same regional warehouse.")

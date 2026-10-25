@@ -21,7 +21,7 @@ from agentwriter.graph import (
     merge_sections,
 )
 from agentwriter.providers.base import ModelResult, ModelT
-from agentwriter.providers.fixture import FixtureGateway
+from agentwriter.providers.fixture import FixtureGateway, FixtureResearchGateway
 
 
 class RecordingGateway(FixtureGateway):
@@ -80,6 +80,29 @@ async def test_real_send_barrier_and_stable_assembly(section_count: int) -> None
     assert result["outcome"] == "succeeded"
     assert result["assembled_markdown"].index("## Section 1") < result["assembled_markdown"].index(f"## Section {section_count}")
     assert result["model_calls"] == section_count + 2
+
+
+async def test_planner_selected_excerpts_are_bounded_before_section_dispatch():
+    request, gateway = scripted()
+    request = CreateRunRequest(**{**request.model_dump(), "research_mode": "required"})
+    research = FixtureResearchGateway({
+        f"https://example.org/page-{i}": {"title": "Dragon story", "text": "dragon story " * 460 + str(i)}
+        for i in range(5)
+    })
+    identities = [(await research.extract(url))["excerpt"]["id"] for url in research._pages]
+    for task in gateway._responses["plan"]["tasks"]:
+        task["evidence_ids"] = identities
+    result = await build_graph(GraphDependencies(
+        model=gateway, request=request, research=research,
+    )).compile().ainvoke(initial_state())
+    assert len(result["excerpts"]) == 5
+    for identity in ("section:section_1:0", "section:section_2:0"):
+        context = json.loads(gateway.messages[identity][1]["content"])
+        selected = context["excerpts"]
+        assert len(selected) == 2
+        assert set(context["task"]["evidence_ids"]) == set(selected)
+        assert sum((len(item["text"].encode()) + 3) // 4 for item in selected.values()) <= 4000
+        assert all(item == result["excerpts"][key] for key, item in selected.items())
 
 
 async def test_targeted_revision_only_rewrites_issue_task() -> None:

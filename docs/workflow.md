@@ -24,7 +24,7 @@ Plans contain two to eight tasks with unique IDs, contiguous order and word budg
 
 Results use identities such as `section_1:0` and `section_1:1`. Repeating an identical value is idempotent; different contents under one committed identity raise a conflict. Review issues can name particular tasks, so a correction does not regenerate unaffected sections. Every correction batch consumes one round. Remaining issues at the limit produce `needs_review` instead of an unbounded loop.
 
-Citation validation checks source identity and allowed markup. It does not prove that an excerpt supports a factual statement. Live-provider claim-support and human quality evaluation remain separate tracker gates. The current deterministic word-budget check flags an assembled article outside 80–120% of its target for review; a successfully parsed model response alone does not bypass it.
+Citation validation checks source identity and allowed markup. It does not prove that an excerpt supports a factual statement. Evaluate real articles against their sources before publishing. The current deterministic word-budget check flags an assembled article outside 80–120% of its target for review; a successfully parsed model response alone does not bypass it.
 
 ## Integration contract
 
@@ -60,7 +60,19 @@ Checkpoints contain JSON primitives. A worker compiles once per claimed executio
 
 The graph's `model_calls` field counts completed node calls for diagnostics. Its process-local limiter bounds a single attempt; the worker's durable reservation ledger is authoritative across crashes and uncertain upstream outcomes. `initial_model_calls` must reflect previously consumed capacity when reconstructing dependencies for recovery. Without the durable hook, an isolated graph invocation does not prove cross-process quota or exactly-once billing behavior.
 
-The current graph carries bounded fixture excerpts for execution. It does not claim a qualified model-token estimator or complete claim-support audit. Large-scale evidence-reference optimization and external provider acceptance must retain their tracker residuals until exercised through the actual persistence/provider paths.
+Research collection limits the total excerpt text with `MAX_EVIDENCE_TOKENS`.
+Section writers receive at most three relevant excerpts within an estimated
+4,000-token text budget, including when the planner explicitly chooses evidence.
+An excerpt that exceeds the remaining budget is skipped; a smaller later excerpt
+can still fit. Page limits also omit oversized excerpts. The application preserves
+each selected excerpt's text, hash and locator, and reports collection omissions
+as a research limitation.
+
+These text budgets use a UTF-8 byte estimate, not an exact model tokenizer. The
+worker separately checks the entire model input before dispatch. Lowering an
+evidence limit can leave a draft with insufficient sources; it does not permit
+invented evidence or establish factual accuracy. Fixture mode applies the same
+bounds to synthetic pages.
 
 ## Executed checks
 

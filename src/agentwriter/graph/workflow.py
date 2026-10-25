@@ -269,14 +269,17 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
         known = set(excerpts)
         if any(evidence_id not in known for task in plan.tasks for evidence_id in task.evidence_ids):
             raise GraphError("plan_unknown_evidence")
-        # The planner may omit evidence IDs. Bind each section deterministically
-        # to the most relevant stored excerpts instead of exposing the whole
-        # research pack or inventing citations.
+        # Bind every section to a bounded relevant subset, including explicit
+        # planner selections. Omitted IDs fall back to the stored evidence.
         mapped = []
         for task in plan.tasks:
-            if not task.evidence_ids and excerpts:
+            if excerpts:
+                candidates = (
+                    {key: excerpts[key] for key in task.evidence_ids}
+                    if task.evidence_ids else excerpts
+                )
                 task = task.model_copy(
-                    update={"evidence_ids": relevant_evidence_ids(task.goal, excerpts, limit=3)}
+                    update={"evidence_ids": relevant_evidence_ids(task.goal, candidates, limit=3)}
                 )
             mapped.append(task)
         if tuple(mapped) != plan.tasks:

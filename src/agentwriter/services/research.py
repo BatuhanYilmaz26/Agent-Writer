@@ -118,8 +118,10 @@ def pack_evidence(
     limit: int = 5,
 ) -> dict[str, dict[str, Any]]:
     """Select a relevant, bounded subset for one section; never fabricate text."""
-    if not 1 <= max_tokens <= 12_000:
+    if type(max_tokens) is not int or not 1 <= max_tokens <= 12_000:
         raise ValueError("Invalid evidence pack bound")
+    if type(limit) is not int or not 1 <= limit <= 24:
+        raise ValueError("Invalid evidence count bound")
     wanted = _tokens(goal)
     ranked = sorted(
         excerpts.items(),
@@ -131,13 +133,13 @@ def pack_evidence(
     )
     chosen: dict[str, dict[str, Any]] = {}
     used = 0
-    for excerpt_id, excerpt in ranked[:limit]:
+    for excerpt_id, excerpt in ranked:
         estimated = max(1, math.ceil(len(str(excerpt.get("text", "")).encode("utf-8")) / 4))
-        if chosen and used + estimated > max_tokens:
+        if used + estimated > max_tokens:
             continue
         chosen[excerpt_id] = excerpt
         used += estimated
-        if used >= max_tokens:
+        if used >= max_tokens or len(chosen) >= limit:
             break
     return chosen
 
@@ -233,6 +235,7 @@ class ResearchCoordinator:
         )
         if len(ranked) > self.limits.max_pages:
             outcome.truncated = True
+        used_tokens = 0
         for result in ranked[: self.limits.max_pages]:
             try:
                 extracted = await self.gateway.extract(str(result["url"]))
@@ -256,13 +259,21 @@ class ResearchCoordinator:
             if not source_id or not excerpt_id:
                 outcome.failures.append({"stage": "extract", "code": "research_invalid_response"})
                 continue
-            text = str(excerpt.get("text", ""))[: self.limits.max_chars_per_page]
-            excerpt["text"] = text
+            text = str(excerpt.get("text", ""))
+            estimated = max(1, math.ceil(len(text.encode("utf-8")) / 4))
+            if (len(text) > self.limits.max_chars_per_page
+                    or used_tokens + estimated > self.limits.max_evidence_tokens):
+                # Keep text/hash/locator identity intact. A smaller later page
+                # may still fit; never force the first oversized page through.
+                outcome.truncated = True
+                continue
+            excerpt = {**excerpt}
             flags = list(excerpt.get("flags", []))
             if source.get("published_at") is None and "publication_date_unknown" not in flags:
                 flags.append("publication_date_unknown")
             excerpt["flags"] = flags
             outcome.sources[source_id] = source
             outcome.excerpts[excerpt_id] = excerpt
+            used_tokens += estimated
         flag_conflicts(outcome.excerpts)
         return outcome

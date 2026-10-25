@@ -33,7 +33,11 @@ The names `OPENROUTER_API_KEY`, `TREG_TOKEN`, and `TAVILY_API_KEY` are canonical
 | `RESEARCH_PROVIDER=treg` | `ENABLE_EXTERNAL_CALLS=true`, `TREG_QUALIFIED=true`, `TREG_TOKEN`, and `TREG_ORG` where the qualified token requires it |
 | `RESEARCH_PROVIDER=tavily` | `ENABLE_EXTERNAL_CALLS=true`, `TAVILY_QUALIFIED=true`, `TAVILY_API_KEY`; separately selected optional adapter |
 
-Qualification flags represent an operator's recorded acceptance evidence in the tracker. They are not evidence themselves and must not be flipped just to bypass validation. Exact Treg schemas/cost controls and account-specific OpenRouter capabilities still require the provider qualification tasks.
+Set qualification flags only after recording your account's successful checks
+from the [provider guide](providers.md). The flags are not evidence themselves
+and must not be flipped just to bypass validation. Recheck exact Treg schemas
+and cost controls, and account-specific OpenRouter capabilities when changing
+accounts or routing policy.
 
 `OPENROUTER_BASE_URL` is fixed to `https://openrouter.ai/api/v1` and `TREG_BASE_URL` to `https://treg.to`. User requests cannot choose these origins. `OPENROUTER_MODEL` must occur in `MODEL_ALLOWLIST`. The default model policy is `free_only`; only `openrouter/free` or explicit `:free` model IDs are permitted under that policy. This string check does not qualify account availability or guarantee a zero total operating cost.
 
@@ -61,6 +65,7 @@ The example hostname is illustrative. Use your owned deployment host. Same-origi
 | `MAX_REVIEW_ROUNDS` | 2 | Maximum correction batches after initial draft |
 | `MODEL_MAX_CONCURRENCY` | 3 | Process execution bound; not a shared RPM/TPM quota |
 | `PROVIDER_RPM` / `PROVIDER_TPM` | 1 / 16000 | Conservative admission defaults to replace only with qualified capacity |
+| `MAX_EVIDENCE_TOKENS` | 12000 | Estimated total excerpt-text budget; oversized excerpts are omitted with a research limitation |
 | `MAX_USER_NONTERMINAL_RUNS` / `MAX_GLOBAL_NONTERMINAL_RUNS` | 2 / 100 | Include retry waits and unacknowledged cancellations |
 | `JOB_LEASE_SECONDS` / `JOB_HEARTBEAT_SECONDS` | 90 / 20 | Heartbeat must be less than half the lease |
 | `DATABASE_POOL_MIN_SIZE` / `DATABASE_POOL_MAX_SIZE` | 1 / 5 | Per-process pool bounds; budget all replicas and dedicated lock sessions |
@@ -92,4 +97,4 @@ Accepted examples without research: “How forests grow” and “Write a short 
 
 Startup errors identify the setting or incompatible policy without displaying credential values. `Settings.sanitized_summary()` returns an allowlisted diagnostic summary; do not dump process environments or raw connection URLs into logs. If configuration fails, correct the named setting rather than disabling persistence, qualification or restricted deserialization.
 
-The implementation follows the [official Pydantic models](https://docs.pydantic.dev/latest/concepts/models/), [validators](https://docs.pydantic.dev/latest/concepts/validators/) and [settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) interfaces. Current executed evidence belongs in the implementation tracker; these instructions do not turn pending infrastructure checks into passes.
+The implementation follows the [official Pydantic models](https://docs.pydantic.dev/latest/concepts/models/), [validators](https://docs.pydantic.dev/latest/concepts/validators/) and [settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) interfaces. Keep your executed checks with your local operating records; configuration examples alone do not verify infrastructure or providers.
