@@ -95,3 +95,9 @@ bounds to synthetic pages.
 The unit suite executes real LangGraph rather than a graph mock: two/eight-way out-of-order dispatch, stable assembly, targeted revision, round exhaustion, invalid plans, reducer conflicts, local call caps, cancellation hooks, and failed-node checkpoint resume. `InMemorySaver` is used only in the explicitly labeled unit recovery check. PostgreSQL recovery, leases, stale-session exclusion, external contracts and deployment behavior require their own integration evidence.
 
 The documented patterns follow the official [LangGraph Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api), [workflow patterns](https://docs.langchain.com/oss/python/langgraph/workflows-agents), and [checkpointer](https://docs.langchain.com/oss/python/langgraph/checkpointers) references. No provider or production guarantee follows from a fixture run.
+
+## Reviewing technical claims
+
+The concise technical profile carries your angle, observations and chosen source URLs through planning, writing and saved-revision assessment. Model inputs include publication, update and retrieval dates separately, plus conservative source-type labels. A publisher's claim is not an independent benchmark, and a preprint label does not establish peer review.
+
+Current-development language without recent publication dates, missing selected sources, unlabeled code examples and certain first-person experiment/deployment claims absent from your observations produce blocking editorial findings. Mark illustrative code as unexecuted; supply your actual environment and results when describing an experiment. Retrieved examples are never executed automatically. These checks are review aids, not a complete semantic fact checker. Read the primary evidence and qualify unsupported claims before publishing.

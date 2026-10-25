@@ -37,6 +37,7 @@ from agentwriter.services.citations import CitationError, render_citations, vali
 from agentwriter.services.claims import extract_claim_assessments, unsupported_claim_issues
 from agentwriter.services.policy import determine_research
 from agentwriter.services.research import ResearchCoordinator, ResearchLimits, relevant_evidence_ids
+from agentwriter.services.technical import source_metadata, technical_issues
 
 AsyncCheck = Callable[[], Awaitable[None]]
 AsyncRecord = Callable[[dict[str, Any]], Awaitable[None]]
@@ -92,6 +93,7 @@ class SectionInputs(TypedDict):
     revision: int
     excerpts: dict[str, dict[str, Any]]
     issues: list[dict[str, Any]]
+    source_metadata: dict[str, Any]
 
 
 @dataclass(slots=True)
@@ -270,7 +272,8 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
                 "Use unique task IDs and contiguous order values from 1 to the number of tasks. "
                 "Choose evidence_ids only from the supplied evidence keys; use empty arrays if there is no evidence."
             ),
-            {"brief": deps.request.model_dump(mode="json"), "evidence": state.get("excerpts", {})},
+            {"brief": deps.request.model_dump(mode="json"), "evidence": state.get("excerpts", {}),
+             "source_metadata": source_metadata(state.get("sources", {}))},
         )
         plan = ContentPlan.model_validate(result.data.model_dump(mode="json"))
         if plan.target_words != deps.request.target_words:
@@ -310,6 +313,8 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
                 "revision": state.get("revision", 0),
                 "excerpts": {key: value for key, value in state.get("excerpts", {}).items() if key in task.evidence_ids},
                 "issues": state.get("issues", []),
+                "source_metadata": source_metadata({key: value for key, value in state.get("sources", {}).items()
+                                                    if key in {excerpt["source_id"] for excerpt in state.get("excerpts", {}).values() if excerpt["id"] in task.evidence_ids}}),
             }) for task in plan.tasks if task.id in selected
         ]
 
@@ -337,7 +342,7 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
         plan = ContentPlan.model_validate(state["plan"])
         sections = _current_sections(state, plan)
         raw = f"# {plan.title}\n\n" + "\n\n".join(f"## {section.title}\n\n{section.content_markdown}" for section in sections) + "\n"
-        issues: list[ReviewIssue] = []
+        issues: list[ReviewIssue] = technical_issues(raw, deps.request, state.get("sources", {}))
         try:
             validate_citations(raw, state.get("sources", {}), require_citations=bool(state["decision"]["need_research"]))
         except CitationError:
@@ -367,7 +372,7 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
         revision = state.get("revision", 0)
         result = await deps.call(
             EditorialReview, f"review:{revision}", "Assess this exact article revision for audience, coherence, support and citations. Return issues with task IDs for targeted revision. Do not approve material unsupported factual claims.",
-            {"brief": deps.request.model_dump(mode="json"), "revision": revision, "article": state["assembled_markdown"], "evidence": state.get("excerpts", {}), "deterministic_issues": state.get("deterministic_issues", [])},
+            {"brief": deps.request.model_dump(mode="json"), "revision": revision, "article": state["assembled_markdown"], "evidence": state.get("excerpts", {}), "source_metadata": source_metadata(state.get("sources", {})), "deterministic_issues": state.get("deterministic_issues", [])},
         )
         review = EditorialReview.model_validate(result.data.model_dump(mode="json"))
         actual_hash = markdown_hash(state["assembled_markdown"])

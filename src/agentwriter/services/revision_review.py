@@ -11,6 +11,7 @@ from agentwriter.providers.base import ModelResult, ProviderError
 from agentwriter.services.citations import CitationError, render_citations, validate_citations
 from agentwriter.services.claims import extract_claim_assessments, unsupported_claim_issues
 from agentwriter.services.policy import determine_research
+from agentwriter.services.technical import source_metadata, technical_issues
 
 
 def review_input(subject: dict) -> tuple[list[dict[str, str]], list[dict], list[dict]]:
@@ -32,7 +33,7 @@ def review_input(subject: dict) -> tuple[list[dict[str, str]], list[dict], list[
     required = determine_research(request).need_research
     excerpts = {key: value for key, value in subject["excerpts"].items()
                 if value.get("source_id") in sources}
-    issues: list[dict] = []
+    issues: list[dict] = [item.model_dump(mode="json") for item in technical_issues(raw, request, sources)]
     claims: list[dict] = []
 
     def issue(code: str, explanation: str) -> None:
@@ -60,6 +61,7 @@ def review_input(subject: dict) -> tuple[list[dict[str, str]], list[dict], list[
         "brief": request.model_dump(mode="json"), "revision": 0,
         "revision_id": article["id"], "content_hash": article["content_hash"],
         "article": article["markdown"], "sources": sources,
+        "source_metadata": source_metadata(sources),
         "evidence": excerpts, "deterministic_issues": issues,
     }
     messages = [
