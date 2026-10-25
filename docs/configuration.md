@@ -73,7 +73,16 @@ Settings validation rejects incompatible bounds, blank inputs, unsupported provi
 
 ## Brief and research validation
 
-Briefs require 1–500 topic characters, at most 4,000 instruction characters, 1–240 audience characters, 1–120 tone characters, 500–3,000 target words, and `language="en"`. Unknown fields, client owner IDs, provider URLs and checkpoint IDs are rejected. Numeric fields require JSON numbers rather than numeric strings or booleans.
+Briefs require 1–500 topic characters, at most 4,000 instruction characters,
+1–240 audience characters, 1–120 tone characters and 500–3,000 target words.
+`language` accepts `en` (English, the default), `tr` (Turkish), `es` (Spanish),
+`pt` (Portuguese) or `de` (German). Region-specific tags and other languages are
+not enabled; put a regional preference in `instructions`. The language is part
+of the request's idempotency identity and remains fixed for that saved run.
+Other-language generated drafts require review of fluency and translated evidence
+before publication; language selection does not certify a model's quality.
+Unknown fields, client owner IDs, provider URLs and checkpoint IDs are rejected.
+Numeric fields require JSON numbers rather than numeric strings or booleans.
 
 `research_mode="required"` always requests research. `auto` retains research for explicit sources, current/sensitive facts, numbers, named products and ambiguous factual briefs. Clear creative/general explanations can avoid research. `off` accepts only clear creative/general briefs without those factual indicators. The rules deliberately err toward research: a numeric title, product name, or even a source request phrased negatively may need rewriting or research enabled. They do not claim to recognize every real-world entity or establish factual accuracy.
 

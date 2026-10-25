@@ -14,8 +14,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from agentwriter.domain.languages import fold_for_matching
+
 _CITATION = re.compile(r"\[@([A-Za-z][A-Za-z0-9_.:-]{0,79})\]")
-_WORD = re.compile(r"[A-Za-z0-9][A-Za-z0-9'-]{1,40}")
+_WORD = re.compile(r"[^\W_](?:[^\W_]|['’-]){1,40}")
 _NUMBER = re.compile(r"\b\d+(?:[.,]\d+)?%?\b")
 _SECRET = re.compile(
     r"(ignore\s+(?:all\s+)?(?:previous|prior|above)\s+instructions|system\s+prompt)", re.I
@@ -55,7 +57,8 @@ class ClaimAssessment:
 
 
 def _tokens(value: str) -> set[str]:
-    return {word.lower() for word in _WORD.findall(value) if word.lower() not in _STOP}
+    normalized = fold_for_matching(value)
+    return {word for word in _WORD.findall(normalized) if word not in _STOP}
 
 
 def _field(value: Any, name: str) -> Any:

@@ -27,6 +27,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 from agentwriter.domain import CreateRunRequest
+from agentwriter.domain.languages import language_profile
 from agentwriter.graph import (
     GraphDependencies,
     GraphError,
@@ -302,22 +303,25 @@ def _safe_message(code: str) -> str:
     return "This draft could not finish. Review the run or start again."
 
 
-def _prepare_artifact(values: dict[str, Any], *, failure_code: str | None = None) -> dict[str, Any] | None:
+def _prepare_artifact(
+    values: dict[str, Any], *, language: str = "en", failure_code: str | None = None,
+) -> dict[str, Any] | None:
     raw = values.get("assembled_markdown")
     if not isinstance(raw, str) or not raw.strip():
         return None
     sources = values.get("sources", {}) if isinstance(values.get("sources"), dict) else {}
     try:
-        markdown = render_citations(raw, sources)
+        markdown = render_citations(raw, sources, language=language)
     except CitationError:
         markdown = raw
     decision: dict[str, Any] = (
         values["decision"] if isinstance(values.get("decision"), dict) else {}
     )
+    profile = language_profile(language)
     if values.get("fixture_calls", 0):
-        markdown = "> Synthetic development draft. No live model or web research was used.\n\n" + markdown
+        markdown = f"> {profile.synthetic_notice}\n\n" + markdown
     elif not decision.get("need_research", False):
-        markdown = "> Unresearched draft. Review factual claims before publication.\n\n" + markdown
+        markdown = f"> {profile.unresearched_notice}\n\n" + markdown
     issues = [item for item in values.get("issues", []) if isinstance(item, dict)]
     if failure_code and not any(item.get("code") == failure_code for item in issues):
         issues.append(
@@ -329,6 +333,7 @@ def _prepare_artifact(values: dict[str, Any], *, failure_code: str | None = None
         )
     claims = [item for item in values.get("claims", []) if isinstance(item, dict)]
     citation_map = {
+        "language": language,
         "sources": sources,
         "editable_markdown": raw,
         "research_limitations": values.get("research_limitations", []),
@@ -381,7 +386,9 @@ async def _finalize(
     *,
     failure_code: str | None = None,
 ) -> dict[str, Any] | None:
-    prepared = _prepare_artifact(values, failure_code=failure_code)
+    prepared = _prepare_artifact(
+        values, language=claim.run["request"].get("language", "en"), failure_code=failure_code,
+    )
     if prepared is None:
         return None
     if failure_code:

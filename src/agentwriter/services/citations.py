@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from agentwriter.domain.languages import language_profile
 from agentwriter.services.urls import validate_public_url
 
 _CITATION = re.compile(r"\[@([A-Za-z][A-Za-z0-9_.:-]{0,79})\]")
@@ -65,9 +66,10 @@ def validate_citations(
     return CitationValidation(ids, len(matches))
 
 
-def render_citations(markdown: str, sources: Mapping[str, Any]) -> str:
+def render_citations(markdown: str, sources: Mapping[str, Any], *, language: str = "en") -> str:
     """Resolve validated markers and append references using ledger URLs only."""
     result = validate_citations(markdown, sources)
+    profile = language_profile(language)
     if not result.source_ids:
         return markdown
     numbers = {source_id: index + 1 for index, source_id in enumerate(result.source_ids)}
@@ -75,12 +77,12 @@ def render_citations(markdown: str, sources: Mapping[str, Any]) -> str:
     references = []
     for source_id in result.source_ids:
         source = sources[source_id]
-        title = str(_field(source, "title") or "Source")
+        title = str(_field(source, "title") or profile.source)
         title = re.sub(r"[\[\]\\\r\n<>]", "", title)[:240]
         url = validate_public_url(_field(source, "url"))
         retrieved = _field(source, "retrieved_at")
         if hasattr(retrieved, "isoformat"):
             retrieved = retrieved.isoformat()
-        suffix = f" (retrieved {str(retrieved)[:40]})" if retrieved else ""
+        suffix = f" ({profile.retrieved} {str(retrieved)[:40]})" if retrieved else ""
         references.append(f"{numbers[source_id]}. [{title}](<{url}>){suffix}")
-    return rendered.rstrip() + "\n\n## References\n\n" + "\n".join(references) + "\n"
+    return rendered.rstrip() + f"\n\n## {profile.references}\n\n" + "\n".join(references) + "\n"

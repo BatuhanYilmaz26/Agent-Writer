@@ -17,6 +17,7 @@ from pydantic import (
     model_validator,
 )
 
+from agentwriter.domain.languages import ArticleLanguage
 from agentwriter.domain.research import factual_research_reason, is_general_or_creative
 
 Identifier = Annotated[str, StringConstraints(strict=True, pattern=r"^[A-Za-z][A-Za-z0-9_.:-]{0,79}$")]
@@ -68,7 +69,7 @@ class CreateRunRequest(DomainModel):
     topic: Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=500)]
     audience: ShortText = "General readers"
     tone: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=120)] = "clear"
-    language: Literal["en"] = "en"
+    language: ArticleLanguage = "en"
     target_words: Annotated[int, Field(strict=True, ge=500, le=3000)] = 1200
     research_mode: ResearchMode = "required"
     instructions: Annotated[str, StringConstraints(strict=True, max_length=4000)] = ""

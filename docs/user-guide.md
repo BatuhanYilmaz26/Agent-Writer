@@ -40,9 +40,35 @@ Fill in:
 | Topic | Yes | 1–500 characters. Be specific about the reader, promise and facts to check. |
 | Reader | Yes | 1–240 characters. Defaults to “General readers”. |
 | Tone | Yes | One of the offered tones; stored with the brief. |
+| Language | Yes | English, Türkçe, Español, Português or Deutsch. Defaults to English. |
 | Target words | Yes | 500–3,000. |
 | Research | Yes | **Required**, **Automatic** or **Off**. |
 | Additional direction → Anything else? | No | Up to 4,000 characters for structure, exclusions or questions. |
+
+### Article language
+
+Choose **Language** beneath the brief to write in English, Turkish, Spanish,
+Portuguese or German. The choice follows the draft through planning, writing,
+revisions and downloads. Reopening a saved draft restores its original language.
+**New draft** returns the settings to their defaults, including English.
+
+The workspace, progress and review controls stay in English. Article headings,
+prose, reference headings and generated disclosure notices use the selected
+language. Source titles and quotations can remain in their original language.
+Specify a regional preference such as Brazilian Portuguese or Spanish from Spain
+in **Additional direction** when it matters to your reader.
+
+Language selection is a writing instruction, not a guarantee of fluency from
+every model. Other-language generated drafts remain **Needs review**: check
+grammar, regional wording and whether translated claims match their evidence.
+This warning alone does not cause extra model rewrite calls. The free router
+can choose different models, so quality may vary; see the
+[official router description](https://openrouter.ai/docs/guides/routing/routers/free-router).
+
+The local fixture profile shows repetitive, translated demonstration paragraphs
+with a synthetic disclosure. It does not translate arbitrary topics or measure
+live model quality. It preserves the topic as you entered it. Downloads use UTF-8,
+preserving characters such as `ğ`, `ñ`, `ã`, `ü` and `ß`.
 
 ### Research modes
 

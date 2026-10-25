@@ -8,10 +8,11 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
+from agentwriter.domain.languages import fold_for_matching
 from agentwriter.providers.base import ProviderError
 from agentwriter.services.urls import canonicalize_url
 
-_WORD = re.compile(r"[a-z0-9][a-z0-9'-]{1,40}")
+_WORD = re.compile(r"[^\W_](?:[^\W_]|['’-]){1,40}")
 _NUMBER = re.compile(r"\b\d+(?:[.,]\d+)?%?\b")
 _STOP = frozenset(
     "the and for with from that this into about your you our their its are was were will "
@@ -67,7 +68,8 @@ class ResearchOutcome:
 
 
 def _tokens(value: str) -> set[str]:
-    return {word for word in _WORD.findall(value.lower()) if word not in _STOP}
+    normalized = fold_for_matching(value)
+    return {word for word in _WORD.findall(normalized) if word not in _STOP}
 
 
 def _authority(url: str) -> int:

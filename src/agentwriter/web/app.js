@@ -14,6 +14,7 @@ const STATE_LABELS = {
   failed: "Could not finish",
   cancelled: "Cancelled",
 };
+const LANGUAGE_LABELS = { en: "English", tr: "Türkçe", es: "Español", pt: "Português", de: "Deutsch" };
 const EVENT_NAMES = [
   "queued", "running", "policy_ready", "research_completed", "source_added",
   "plan_ready", "section_completed", "review_completed", "retry_wait",
@@ -292,7 +293,7 @@ function renderLibrary() {
     const meta = document.createElement("span");
     meta.className = "library-card-meta";
     const length = document.createElement("span");
-    length.textContent = `${Number(run.request.target_words || 0).toLocaleString()} word brief`;
+    length.textContent = `${LANGUAGE_LABELS[run.request.language || "en"]} · Target ${Number(run.request.target_words || 0).toLocaleString()} words`;
     const date = document.createElement("span");
     date.textContent = relativeTime(run.accepted_at);
     meta.append(length, date);
@@ -701,6 +702,9 @@ function renderPipeline() {
 function renderRun(run) {
   const previousRevision = state.run && state.run.current_revision;
   state.run = run;
+  const language = run.request.language || "en";
+  $("preview").lang = language;
+  $("editor").lang = language;
   $("draft-title").textContent = run.request.topic;
   if (state.view === "draft") document.title = `${run.request.topic} — AgentWriter`;
   const statePill = $("state");
@@ -1025,8 +1029,8 @@ async function selectRun(id, options = {}) {
     const run = await refreshRun();
     if (state.activeRun !== id) return;
     if (run) {
-      for (const field of ["topic", "audience", "tone", "target_words", "research_mode", "instructions"]) {
-        $(field).value = run.request[field] ?? "";
+      for (const field of ["topic", "audience", "tone", "language", "target_words", "research_mode", "instructions"]) {
+        $(field).value = run.request[field] ?? (field === "language" ? "en" : "");
       }
       $("brief-extra").open = Boolean(run.request.instructions);
       updateBriefDetails();
@@ -1056,8 +1060,9 @@ function researchWarning() {
   const instructions = $("instructions").value;
   const mode = $("research_mode").value;
   const sourceDependent = /\b(latest|current|currently|today|news|recent|price|pricing|cost|statistic|study|report|version|release|law|regulation|medical|financial|tax)\b|\d{4}|\d+%/i.test(`${topic} ${instructions}`);
+  const localizedFacts = /güncel|bugün|fiyat|maliyet|istatistik|sürüm|mevzuat|tıbbi|vergi|yatırım|fuentes?|precios?|noticias|médic|impuesto|preço|atual|notícias|pesquisa|investimento|aktuell|nachrichten|preise?|gesetz|medizin|steuer|quellen/iu.test(`${topic} ${instructions}`);
   const warning = $("research-warning");
-  if (mode === "off" && sourceDependent) {
+  if (mode === "off" && (sourceDependent || localizedFacts)) {
     warning.textContent = "This brief looks source-dependent. Choose Required or Automatic so the draft can cite evidence, or narrow it to a clearly creative topic.";
     warning.hidden = false;
     return false;
@@ -1072,7 +1077,7 @@ function buildBrief() {
     topic: $("topic").value.trim(),
     audience: $("audience").value.trim(),
     tone: $("tone").value,
-    language: "en",
+    language: $("language").value,
     target_words: Number($("target_words").value),
     research_mode: $("research_mode").value,
     instructions: $("instructions").value.trim(),

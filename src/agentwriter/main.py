@@ -292,10 +292,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except (CitationError, ValueError):
             raise StorageError("invalid_article", "Use valid source markers and omit raw HTML/external links.", 422) from None
         sources_by_id = {source["id"]: source for source in ledger}
-        rendered = render_citations(change.markdown, sources_by_id)
+        run = await request.app.state.repository.get_run(owner, run_id)
+        language = run["request"].get("language", "en")
+        rendered = render_citations(change.markdown, sources_by_id, language=language)
         return await request.app.state.repository.edit_article(
             owner, run_id, str(change.parent_revision), rendered,
-            citation_map={"sources": sources_by_id, "editable_markdown": change.markdown},
+            citation_map={"sources": sources_by_id, "editable_markdown": change.markdown, "language": language},
         )
 
     @app.get("/api/v1/runs/{run_id}/revisions/{revision}/download")
@@ -304,6 +306,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return PlainTextResponse(result["markdown"], media_type="text/markdown; charset=utf-8", headers={
             "Content-Disposition": f'attachment; filename="agentwriter-{result["id"]}.md"',
             "ETag": f'"{result["content_hash"]}"', "Cache-Control": "private, no-store",
+            "Content-Language": result.get("citation_map", {}).get("language", "en"),
         })
 
     @app.get("/api/v1/runs/{run_id}/events")

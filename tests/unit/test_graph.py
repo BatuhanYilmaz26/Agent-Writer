@@ -1,6 +1,7 @@
 """Execute real LangGraph dispatch, revision, checkpoints and failure gates."""
 
 import asyncio
+import json
 from dataclasses import replace
 from typing import Any
 
@@ -9,6 +10,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import ValidationError
 
 from agentwriter.domain import CreateRunRequest, SectionDraft
+from agentwriter.domain.languages import LANGUAGES
 from agentwriter.graph import (
     GraphDependencies,
     GraphError,
@@ -32,9 +34,11 @@ class RecordingGateway(FixtureGateway):
     def __init__(self, responses: dict[str, dict[str, Any]], task_count: int) -> None:
         super().__init__(responses)
         self.finished: list[str] = []
+        self.messages: dict[str, list[dict[str, str]]] = {}
         self.task_count = task_count
 
     async def generate(self, schema: type[ModelT], messages: list[dict[str, str]], call_identity: str, max_tokens: int = 2048, *, reserved_cost_usd: Any = None) -> ModelResult[ModelT]:
+        self.messages[call_identity] = messages
         if call_identity.startswith("section:"):
             task_number = int(call_identity.split(":")[1].split("_")[1])
             await asyncio.sleep((self.task_count - task_number) * 0.002)
@@ -88,6 +92,21 @@ async def test_targeted_revision_only_rewrites_issue_task() -> None:
     assert result["assembled_markdown"].count("## Section 1") == 1
     assert "revision1" in result["assembled_markdown"]
     assert result["review"]["assessed_revision"] == 1
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+async def test_every_model_stage_receives_the_selected_language(language):
+    request, gateway = scripted()
+    request = CreateRunRequest(**{**request.model_dump(), "language": language})
+    result = await build_graph(GraphDependencies(model=gateway, request=request)).compile().ainvoke(initial_state())
+    assert len(gateway.calls) == 4  # No retries solely for an unqualified locale.
+    for messages in gateway.messages.values():
+        assert LANGUAGES[language].name in messages[0]["content"]
+        assert "language_mismatch" in messages[0]["content"]
+        assert json.loads(messages[1]["content"])["brief"]["language"] == language
+    assert result["outcome"] == ("succeeded" if language == "en" else "needs_review")
+    if language != "en":
+        assert any(issue["code"] == "language_review_required" for issue in result["issues"])
 
 
 async def test_review_rejection_stops_at_round_cap() -> None:

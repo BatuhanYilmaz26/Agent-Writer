@@ -705,6 +705,7 @@ h1,h2,h3 {
 
 /* The brief is a work surface, not a marketing page. */
 .studio-intro {
+  overflow:clip;
   display:grid;
   grid-template-columns:1fr 220px;
   align-items:center;
@@ -1046,13 +1047,25 @@ textarea {
 .brief-output {
   display:flex;
   align-items:center;
+  flex-wrap:wrap;
   gap:8px;
   color:var(--faint);
   font-size:10px
 }
 
-.brief-output>span>span {
-  margin:0 7px
+.brief-output label {
+  margin:0;
+  font-size:11px;
+}
+
+.language-picker {
+  width:142px;
+}
+
+.language-picker select {
+  min-height:32px;
+  padding:5px 26px 5px 9px;
+  font-size:12px;
 }
 
 .document-symbol {
@@ -2761,4 +2774,8 @@ body[data-focus='true'] .draft-grid {
   flex-wrap:wrap;
   gap:10px;
   margin-top:24px;
+}
+
+@media (max-width:570px) {
+  .language-picker select {font-size:16px;min-height:40px}
 }

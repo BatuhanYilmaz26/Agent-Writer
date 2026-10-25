@@ -3,7 +3,8 @@
 Source-aware article drafting with durable runs, transparent evidence and human review.
 
 AgentWriter turns a brief into a structured Markdown draft, shows the evidence and
-review findings behind it, and keeps every revision. The default local profile uses
+review findings behind it, and keeps every revision. Article languages include
+English, Turkish, Spanish, Portuguese and German. The default local profile uses
 fixture model and research providers, so it is safe to explore without credentials
 or network calls. A draft is never presented as approved or fact checked by the
 fixture.

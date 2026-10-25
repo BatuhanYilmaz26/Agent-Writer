@@ -11,12 +11,25 @@ _FRESH = re.compile(
     r"\b(latest|current|currently|today|yesterday|tomorrow|recent|recently|"
     r"news|this\s+(?:week|month|year)|up[- ]to[- ]date|pricing|prices?|costs?|"
     r"rates?|statistics?|benchmarks?|versions?|releases?|regulations?|laws?|"
-    r"legislation|legal|medical|dosage|clinical|investment|financial|tax)\b",
+    r"legislation|legal|medical|dosage|clinical|investment|financial|tax|"
+    r"güncel\w*|bugün|dün|yarın|en\s+son|fiyat\w*|maliyet\w*|istatistik\w*|"
+    r"sürüm\w*|yasa\w*|mevzuat|hukuk\w*|tıbbi|ilaç\w*|doz\w*|yatırım\w*|finans\w*|vergi\w*|"
+    r"actual(?:es|mente)?|hoy|ayer|mañana|reciente\w*|noticias|precio\w*|costo\w*|coste\w*|"
+    r"estadístic\w*|versi[oó]n\w*|lanzamiento\w*|regulaci[oó]n\w*|leyes?|legislaci[oó]n|"
+    r"jurídic\w*|médic\w*|dosis|inversi[oó]n|financier\w*|impuesto\w*|"
+    r"atua(?:l\w*|is)|hoje|ontem|amanhã|notícias|preço\w*|custo\w*|vers[aã]o|lançamento\w*|"
+    r"regulament\w*|leis?|legislaç\w*|investimento\w*|financeir\w*|"
+    r"aktuell\w*|heute|gestern|morgen|neueste\w*|nachrichten|preis\w*|kosten\w*|statistik\w*|"
+    r"veröffentlich\w*|verordnung\w*|gesetz\w*|rechtlich\w*|medizin\w*|medikament\w*|dosier\w*|investition\w*|finanz\w*|steuer\w*)\b",
     re.IGNORECASE,
 )
 _SOURCES = re.compile(
     r"\b(sources?|citations?|cite|references?|evidence|verify|fact[- ]check|"
-    r"official\s+(?:docs?|documentation|information)|research)\b",
+    r"official\s+(?:docs?|documentation|information)|research|"
+    r"kaynak\w*|atıf\w*|kanıt\w*|doğrula\w*|araştır\w*|"
+    r"fuente\w*|cita\w*|referencia\w*|evidencia\w*|verific\w*|investigaci[oó]n|"
+    r"fonte\w*|citaç\w*|referência\w*|evidência\w*|pesquis\w*|"
+    r"quelle\w*|zitat\w*|beleg\w*|nachweis\w*|überprüf\w*|recherch\w*)\b",
     re.IGNORECASE,
 )
 _NUMBER = re.compile(r"\d")
@@ -28,12 +41,17 @@ _NAMED = re.compile(
 )
 _CREATIVE = re.compile(
     r"\b(poem|poetry|fiction|fictional|fantasy|fable|fairy\s+tale|"
-    r"bedtime\s+story|creative\s+story|short\s+story|imaginary|invented)\b",
+    r"bedtime\s+story|creative\s+story|short\s+story|imaginary|invented|"
+    r"şiir\w*|öykü\w*|hikâye\w*|hikaye\w*|masal\w*|kurgu\w*|hayali|uydurma|"
+    r"poema\w*|poesía|ficción|fábula\w*|cuento\w*|imaginari\w*|poesia|ficção|conto\w*|"
+    r"gedicht\w*|poesie|fiktion\w*|fiktiv\w*|märchen|kurzgeschichte\w*|fantasie\w*|erfunden\w*)\b",
     re.IGNORECASE,
 )
 _GENERAL = re.compile(
     r"^(?:explain|describe|introduce|understand|understanding|introduction\s+to|"
-    r"how|why|what\s+is|what\s+are|the\s+basics\s+of|a\s+beginner['’]?s?\s+guide\s+to)\b",
+    r"how|why|what\s+is|what\s+are|the\s+basics\s+of|a\s+beginner['’]?s?\s+guide\s+to|"
+    r"açıkla|anlat|nasıl|neden|qué\s+es|qué\s+son|cómo|por\s+qué|explica\w*|describe\w*|"
+    r"o\s+que\s+é|como|por\s+que|explique|descreva|wie|warum|was\s+ist|was\s+sind|erkläre\w*|beschreibe\w*)\b",
     re.IGNORECASE,
 )
 
@@ -57,4 +75,5 @@ def factual_research_reason(topic: str, instructions: str = "") -> str | None:
 def is_general_or_creative(topic: str, instructions: str = "") -> bool:
     """Only recognize explicit creative or general explanatory drafting."""
     text = f"{topic} {instructions}"
-    return bool(_CREATIVE.search(text) or _GENERAL.search(topic))
+    return bool(_CREATIVE.search(text) or _GENERAL.search(topic)
+                or re.search(r"\b(nasıl|nedir|neden)\b", topic, re.IGNORECASE))
