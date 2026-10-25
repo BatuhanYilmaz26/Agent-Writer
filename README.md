@@ -11,8 +11,7 @@ for Medium, LinkedIn and X. The author controls the final wording and publicatio
 
 ![Technical article preview with a Pydantic code example, editorial review and revision history](assets/technical-writing-studio.jpg)
 
-*An edited technical article sample in the local fixture profile. The screenshot
-shows the working interface; its synthetic source and review data do not demonstrate live model quality.*
+*Technical article sample edited in the local fixture profile; source and review data are synthetic.*
 
 ## AI engineering in the project
 
@@ -33,17 +32,11 @@ bounded execution and reviewable outputs.
 
 ```mermaid
 flowchart LR
-    brief["Writing brief"] --> policy{"Research needed?"}
-    policy -->|Yes| research["Search and extract evidence"]
-    policy -->|No| plan["Validated plan"]
-    research --> plan
-    plan --> draft["Parallel section drafting"]
-    draft --> assemble["Assembly and citation checks"]
-    assemble --> review["Editorial review"]
+    plan["Brief and research<br/>Validated plan"] --> draft["Parallel section<br/>drafting"]
+    draft --> review["Citation checks<br/>and review"]
     review -->|Bounded rewrite| draft
-    review -->|Save outcome| article["Versioned article"]
-    article --> author["Author edits and review"]
-    author --> export["Medium / LinkedIn / X bundle"]
+    review --> article["Saved article<br/>revision"]
+    article --> author["Author review<br/>and export"]
 ```
 
 Generation runs in the worker, outside the HTTP request. Checkpoints and committed
