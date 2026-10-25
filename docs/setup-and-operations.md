@@ -18,7 +18,8 @@ and provider gate, see [configuration](configuration.md) and
 - Docker Engine/Desktop only if you want the Compose profile.
 
 No OpenRouter, Treg or Tavily account is needed for the fixture profile.
-OpenRouter still needs a successful account qualification. Treg has a qualified
+Before using live models, qualify your OpenRouter account with the
+[one-request check](providers.md#check-your-openrouter-account). Treg has a qualified
 route, but another account or routing change needs its own check. See the
 [provider guide](providers.md) before enabling external calls.
 

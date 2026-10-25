@@ -66,8 +66,20 @@ does not qualify article quality, every model's schemas, or continued account
 capacity. Contract tests use HTTPX's in-memory transport and remain distinct
 from authenticated qualification.
 
-Official references, consulted 24 October 2026:
+If the check returns `provider_rate_limited`, stop and inspect
+`retry_after_seconds` in the report. Wait at least that long when supplied;
+otherwise wait before choosing another manual check. A reported remaining daily
+quota does not guarantee that an eligible upstream model has capacity. Do not
+run a polling loop or change models to work around a failed check.
 
+The free router chooses among eligible models and filters for requested
+capabilities, including structured output. A later request can use another
+model. Keep the returned model and provider with each result, and evaluate real
+article revisions separately, including fluency in the selected language.
+
+Official references, consulted 25 October 2026:
+
+- [Free router selection and capabilities](https://openrouter.ai/docs/guides/routing/routers/free-router)
 - [Structured output and endpoint support](https://openrouter.ai/docs/guides/features/structured-outputs)
 - [Provider routing and data policies](https://openrouter.ai/docs/guides/routing/provider-selection)
 - [Account limits](https://openrouter.ai/docs/api_reference/limits)

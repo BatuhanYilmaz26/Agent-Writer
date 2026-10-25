@@ -97,6 +97,30 @@ async def test_exhausted_account_quota_never_dispatches():
 
 
 @pytest.mark.asyncio
+async def test_rate_limited_probe_stops_after_one_inference_and_retains_wait():
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        if request.url.path.endswith("/key"):
+            return httpx.Response(200, json={"data": {"is_free_tier": True}})
+        return httpx.Response(
+            429, headers={"Retry-After": "120"},
+            json={"error": "private upstream detail private-token"},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        report = await qualify_openrouter(client, "private-token")
+    assert report["qualified"] is False
+    assert report["code"] == "provider_rate_limited"
+    assert report["retryable"] is True
+    assert report["retry_after_seconds"] == 120
+    assert len(calls) == 2
+    assert [request.method for request in calls] == ["GET", "POST"]
+    assert "private" not in json.dumps(report)
+
+
+@pytest.mark.asyncio
 async def test_paid_model_is_rejected_before_even_account_lookup():
     calls = []
     async with httpx.AsyncClient(transport=httpx.MockTransport(
