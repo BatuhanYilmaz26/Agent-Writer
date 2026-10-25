@@ -2792,3 +2792,17 @@ body[data-focus='true'] .draft-grid {
 .topic-ideas .actions {gap:18px}
 .brief-settings fieldset {border:0;padding:0}
 .brief-settings fieldset input {width:auto;min-height:0;margin-right:8px}
+
+.publication-panel {border-top:1px solid var(--strong);padding:28px;overflow-wrap:anywhere}
+.publication-panel h2 {font-size:23px;letter-spacing:-.7px}
+.publication-panel p {font-size:13px;line-height:1.8;margin-block:14px}
+.publication-panel .field {margin-block:18px}
+.publication-panel textarea {width:100%;min-height:120px;resize:vertical}
+.publication-panel .actions {flex-wrap:wrap;margin-block:16px;gap:10px}
+.publication-panel input:not([type=checkbox]),.publication-panel select {max-width:100%;width:100%}
+.publication-checklist {border:1px solid var(--strong);border-radius:10px;padding:18px;margin-block:18px}
+.publication-checklist legend {font-size:13px;padding:0 6px}
+.publication-checklist label {display:block;font-size:12px;line-height:1.8;margin-block:10px}
+.publication-checklist input {width:auto;min-height:0;margin-right:8px}
+.publication-options {display:grid;grid-template-columns:2fr 1fr;gap:18px}
+@media(max-width:570px){.publication-panel{padding:20px}.publication-options{grid-template-columns:1fr;gap:0}}

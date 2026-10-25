@@ -36,7 +36,10 @@ from agentwriter.api.security import (
     revoke_current,
 )
 from agentwriter.domain import TERMINAL_STATES, CreateRunRequest
+from agentwriter.domain.publishing import PublicationRecordRequest, PublicationRequest
 from agentwriter.services.citations import CitationError, render_citations, validate_citations
+from agentwriter.services.publishing import build_publication, publication_zip
+from agentwriter.services.technical import source_metadata
 from agentwriter.services.topics import collect_feeds, rank_topics
 from agentwriter.settings import Settings
 from agentwriter.storage.pool import database_pool
@@ -289,7 +292,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/runs/{run_id}/sources")
     async def sources(run_id: str, request: Request, owner: str = Depends(authenticated),
                       limit: int = Query(default=50, ge=1, le=100), offset: int = Query(default=0, ge=0)):
-        return {"sources": await request.app.state.repository.sources(owner, run_id, limit=limit, offset=offset)}
+        rows = await request.app.state.repository.sources(owner, run_id, limit=limit, offset=offset)
+        metadata = source_metadata({row["id"]: row for row in rows})
+        return {"sources": [{**row, **metadata[row["id"]]} for row in rows]}
 
     @app.get("/api/v1/runs/{run_id}/article")
     async def article(
@@ -340,6 +345,48 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "ETag": f'"{result["content_hash"]}"', "Cache-Control": "private, no-store",
             "Content-Language": result.get("citation_map", {}).get("language", "en"),
         })
+
+    @app.post("/api/v1/runs/{run_id}/revisions/{revision_id}/packages", status_code=201)
+    async def prepare_publication(run_id: UUID, revision_id: UUID, change: PublicationRequest,
+                                  request: Request, owner: str = Depends(authenticated)):
+        repo = request.app.state.repository
+        article = await repo.get_article(owner, str(run_id), str(revision_id))
+        run = await repo.get_run(owner, str(run_id))
+        try:
+            data = build_publication(article, change, run["request"])
+        except ValueError as exc:
+            code = "revision_conflict" if str(exc) == "revision_conflict" else "platform_length_invalid"
+            raise StorageError(code, "Check the selected revision and the platform text lengths.",
+                               409 if code == "revision_conflict" else 422) from None
+        package = await repo.save_publication_package(owner, str(run_id), str(revision_id),
+                                                      change.content_hash, change.model_dump(mode="json"), data)
+        return await repo.publication_package(owner, str(run_id), package["id"])
+
+    @app.get("/api/v1/runs/{run_id}/packages")
+    async def packages(run_id: UUID, request: Request, owner: str = Depends(authenticated)):
+        return {"packages": await request.app.state.repository.publication_packages(owner, str(run_id))}
+
+    @app.get("/api/v1/runs/{run_id}/packages/{package_id}")
+    async def package(run_id: UUID, package_id: UUID, request: Request, owner: str = Depends(authenticated)):
+        return await request.app.state.repository.publication_package(owner, str(run_id), str(package_id))
+
+    @app.get("/api/v1/runs/{run_id}/packages/{package_id}/download")
+    async def package_download(run_id: UUID, package_id: UUID, request: Request, owner: str = Depends(authenticated)):
+        package = await request.app.state.repository.publication_package(owner, str(run_id), str(package_id))
+        return Response(publication_zip(package), media_type="application/zip", headers={
+            "Content-Disposition": f'attachment; filename="agentwriter-publication-{package_id}.zip"',
+            "Cache-Control": "private, no-store",
+        })
+
+    @app.post("/api/v1/runs/{run_id}/packages/{package_id}/publications", status_code=201)
+    async def record_publication(run_id: UUID, package_id: UUID, record: PublicationRecordRequest,
+                                 request: Request, owner: str = Depends(authenticated)):
+        return await request.app.state.repository.record_publication(
+            owner, str(run_id), str(package_id), record.model_dump(mode="json"))
+
+    @app.get("/api/v1/runs/{run_id}/publications")
+    async def publications(run_id: UUID, request: Request, owner: str = Depends(authenticated)):
+        return {"publications": await request.app.state.repository.publication_history(owner, str(run_id))}
 
     @app.get("/api/v1/runs/{run_id}/events")
     async def events(

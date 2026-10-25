@@ -1,0 +1,224 @@
+{
+  "source": "https://github.com/twitter/twitter-text/blob/master/conformance/validate.yml",
+  "source_sha256": "29fa1be663676f3d0bb0a67f393b32c15d92c5dd10db9be401bf7708d7c5b703",
+  "checked_at": "2026-10-25",
+  "license": "Apache-2.0",
+  "cases": [
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Regular Tweet with url",
+      "text": "Hi http://test.co",
+      "expected": {
+        "weightedLength": 26,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Just url",
+      "text": "http://test.co",
+      "expected": {
+        "weightedLength": 23,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Long tweet, overflow at char index 280",
+      "text": "285 chars-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-",
+      "expected": {
+        "weightedLength": 285,
+        "valid": false
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Long tweet with url in the middle, overflow at char index 284",
+      "text": "285 chars- http://www.twitter.com/jack xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-",
+      "expected": {
+        "weightedLength": 299,
+        "valid": false
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Long tweet with url at the end, overflow at char index 265",
+      "text": "xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx- http://www.twitter.com/jack ",
+      "expected": {
+        "weightedLength": 289,
+        "valid": false
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "10 url string, no overflow",
+      "text": "https://www.twitter.com/aloha https://www.twitter.com/aloha https://www.twitter.com/aloha https://www.twitter.com/aloha https://www.twitter.com/aloha https://www.twitter.com/aloha https://www.twitter.com/aloha https://www.twitter.com/aloha https://www.twitter.com/aloha https://www.twitter.com/aloha ",
+      "expected": {
+        "weightedLength": 240,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "160 CJK char, overflow at char index 140",
+      "text": "\u6545\u4eba\u897f\u8f9e\u9ec4\u9e64\u697c\uff0c\u70df\u82b1\u4e09\u6708\u4e0b\u626c\u5dde\u3002\u5b64\u5e06\u8fdc\u5f71\u78a7\u7a7a\u5c3d\uff0c\u552f\u89c1\u957f\u6c5f\u5929\u9645\u6d41\u3002\u6731\u96c0\u6865\u8fb9\u91ce\u8349\u82b1\uff0c\u4e4c\u8863\u5df7\u53e3\u5915\u9633\u659c\u3002\u65e7\u65f6\u738b\u8c22\u5802\u524d\u71d5\uff0c\u98de\u5165\u5bfb\u5e38\u767e\u59d3\u5bb6\u3002\u671d\u8f9e\u767d\u5e1d\u5f69\u4e91\u95f4\uff0c\u5343\u91cc\u6c5f\u9675\u4e00\u65e5\u8fd8\u3002\u4e24\u5cb8\u733f\u58f0\u557c\u4e0d\u4f4f\uff0c\u8f7b\u821f\u5df2\u8fc7\u4e07\u91cd\u5c71\u3002\u6cea\u6e7f\u7f57\u5dfe\u68a6\u4e0d\u6210\uff0c\u591c\u6df1\u524d\u6bbf\u6309\u6b4c\u58f0\u3002\u7ea2\u989c\u672a\u8001\u6069\u5148\u65ad\uff0c\u659c\u501a\u85b0\u7b3c\u5750\u5230\u660e\u3002\u72ec\u5728\u5f02\u4e61\u4e3a\u5f02\u5ba2\uff0c\u6bcf\u9022\u4f73\u8282\u500d\u601d\u4eb2\u3002\u9065\u77e5\u5144\u5f1f\u767b\u9ad8\u5904\uff0c\u904d\u63d2\u8331\u8438\u5c11\u4e00\u4eba\u3002",
+      "expected": {
+        "weightedLength": 320,
+        "valid": false
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "160 emoji char, overflow at char index 140",
+      "text": "\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37\ud83d\ude37",
+      "expected": {
+        "weightedLength": 320,
+        "valid": false
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "3 latin char + 160 CJK char, overflow at char index 141",
+      "text": "the\u6545\u4eba\u897f\u8f9e\u9ec4\u9e64\u697c\uff0c\u70df\u82b1\u4e09\u6708\u4e0b\u626c\u5dde\u3002\u5b64\u5e06\u8fdc\u5f71\u78a7\u7a7a\u5c3d\uff0c\u552f\u89c1\u957f\u6c5f\u5929\u9645\u6d41\u3002\u6731\u96c0\u6865\u8fb9\u91ce\u8349\u82b1\uff0c\u4e4c\u8863\u5df7\u53e3\u5915\u9633\u659c\u3002\u65e7\u65f6\u738b\u8c22\u5802\u524d\u71d5\uff0c\u98de\u5165\u5bfb\u5e38\u767e\u59d3\u5bb6\u3002\u671d\u8f9e\u767d\u5e1d\u5f69\u4e91\u95f4\uff0c\u5343\u91cc\u6c5f\u9675\u4e00\u65e5\u8fd8\u3002\u4e24\u5cb8\u733f\u58f0\u557c\u4e0d\u4f4f\uff0c\u8f7b\u821f\u5df2\u8fc7\u4e07\u91cd\u5c71\u3002\u6cea\u6e7f\u7f57\u5dfe\u68a6\u4e0d\u6210\uff0c\u591c\u6df1\u524d\u6bbf\u6309\u6b4c\u58f0\u3002\u7ea2\u989c\u672a\u8001\u6069\u5148\u65ad\uff0c\u659c\u501a\u85b0\u7b3c\u5750\u5230\u660e\u3002\u72ec\u5728\u5f02\u4e61\u4e3a\u5f02\u5ba2\uff0c\u6bcf\u9022\u4f73\u8282\u500d\u601d\u4eb2\u3002\u9065\u77e5\u5144\u5f1f\u767b\u9ad8\u5904\uff0c\u904d\u63d2\u8331\u8438\u5c11\u4e00\u4eba\u3002",
+      "expected": {
+        "weightedLength": 323,
+        "valid": false
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "282 chars with a normalized character within valid range but outside 280",
+      "text": "282 chars-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxxxxxx-xxxxxA\u0301x",
+      "expected": {
+        "weightedLength": 281,
+        "valid": false
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Count a mix of single byte single word, and double word unicode characters",
+      "text": "H\ud83d\udc31\u263a\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66",
+      "expected": {
+        "weightedLength": 7,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Count unicode emoji chars inside the basic multilingual plane",
+      "text": "\ud83d\ude37\ud83d\udc7e\ud83d\ude21\ud83d\udd25\ud83d\udca9",
+      "expected": {
+        "weightedLength": 10,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Count unicode emoji chars outside the basic multilingual plane with skin tone modifiers",
+      "text": "\ud83d\ude4b\ud83c\udffd\ud83d\udc68\u200d\ud83c\udfa4",
+      "expected": {
+        "weightedLength": 4,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Handle General Punctuation Characters with visible spaces(u2000-200A), no ZWJ/ZWNJ",
+      "text": "This is a tweet with general punctuation characters: \u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u200b \u2010 \u2011 \u2012 \u2013 \u2014 \u2015 \u2016  \u2017 \u2018 \u2019 \u201a \u201b \u201c \u201d \u201e \u201f \u2032 \u2033 \u2034 \u2035 \u2036 \u2037",
+      "expected": {
+        "weightedLength": 110,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Handle long url with invalid domain labels and short url",
+      "text": "Long url with invalid domain labels and a short url: https://somesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurl.com/foo https://somesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurl.com/foo https://somesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurlsomesuperlongurl.com/foo https://validurl.com",
+      "expected": {
+        "weightedLength": 12079,
+        "valid": false
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Handle a 64 character domain without protocol",
+      "text": "randomurlrandomurlrandomurlrandomurlrandomurlrandomurlrandomurls.com",
+      "expected": {
+        "weightedLength": 68,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Do not allow > 140 CJK characters by virtue of CJK chars greater than 63 punycode encoded chars in the host",
+      "text": "\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053 http://\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046.com",
+      "expected": {
+        "weightedLength": 358,
+        "valid": false
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Allow > 140 CJK characters by virtue of CJK chars less than 63 punycode encoded chars in the host",
+      "text": "\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053 http://\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044\u3046\u3048\u304a\u304b\u304d\u304f\u3051\u3053\u3042\u3044.com",
+      "expected": {
+        "weightedLength": 264,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "140 family emoji",
+      "text": "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\u200d\ud83d\udc66",
+      "expected": {
+        "weightedLength": 280,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Emoji with a leading character in the latin range is counted as 2",
+      "text": "1\u20e3",
+      "expected": {
+        "weightedLength": 2,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Unicode 10.0 emoji",
+      "text": "Unicode 10.0 emoji: \ud83e\udd2a; \ud83e\uddd5; \ud83e\uddd5\ud83c\udffe; \ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f",
+      "expected": {
+        "weightedLength": 34,
+        "valid": true
+      }
+    },
+    {
+      "group": "WeightedTweetsWithDiscountedEmojiCounterTest",
+      "description": "Unicode 9.0 emoji",
+      "text": "Unicode 9.0 emoji: \ud83e\udd20; \ud83d\udc83; \ud83d\udc83\ud83c\udffe",
+      "expected": {
+        "weightedLength": 29,
+        "valid": true
+      }
+    },
+    {
+      "group": "UnicodeDirectionalMarkerCounterTest",
+      "description": "Handle invalid characters",
+      "text": "ABC\u202a\uffffABC\ufffe",
+      "expected": {
+        "weightedLength": 12,
+        "valid": false
+      }
+    },
+    {
+      "group": "UnicodeDirectionalMarkerCounterTest",
+      "description": "Tweet text containing directional characters should be considered valid",
+      "text": "\u2066\u202ahttp://foobar.\u067e\u0627\u06a9\u0633\u062a\u0627\u0646/\u202c\u2069",
+      "expected": {
+        "weightedLength": 31,
+        "valid": true
+      }
+    }
+  ]
+}

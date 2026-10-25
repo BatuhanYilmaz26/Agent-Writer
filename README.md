@@ -1,6 +1,6 @@
 # AgentWriter
 
-A local writing studio for source-aware blog posts, thoughtful editing and clear review.
+A local writing studio for concise technical articles and posts for Medium, LinkedIn and X.
 
 [User guide](docs/user-guide.md) · [Get started](docs/setup-and-operations.md) · [Configuration](docs/configuration.md)
 
@@ -15,10 +15,13 @@ every saved revision. You decide what is ready to publish.
 ## What you can do
 
 - **Write in five languages.** English, Turkish, Spanish, Portuguese and German.
-- **Work from a clear brief.** Set the audience, tone, target length and research preference.
+- **Find a timely topic.** Refresh publisher and research feeds on demand, inspect dates and sources, and spot ideas already used in your drafts.
+- **Work from your point of view.** Choose a concise technical profile, target length and research preference; add your angle, observations and primary sources.
 - **Keep evidence close.** Inspect source links, citation checks and claim-support findings alongside the draft.
 - **Edit with a history.** Save changes as new revisions, reopen earlier versions and download the exact Markdown you selected.
 - **Request a fresh review.** Assess a saved edit without rewriting it. The assessment belongs to that revision; later edits start unassessed.
+- **Prepare a publication bundle.** Edit LinkedIn/X extracts, check platform lengths, add an honest AI disclosure and export article text, HTML, Markdown and references. Posting stays in your hands.
+- **Keep a publishing log.** Save the links and dates of posts you published, tied to the exact article revision.
 - **Come back later.** Runs and progress are stored in PostgreSQL and processed by a separate worker.
 
 ## Get started

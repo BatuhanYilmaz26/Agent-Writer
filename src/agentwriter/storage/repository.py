@@ -142,6 +142,110 @@ class Repository:
             )).fetchall()
             return [row["request"] for row in rows]
 
+    async def save_publication_package(
+        self, owner: str, run_id: str, revision_id: str, content_hash: str,
+        inputs: dict, data: dict,
+    ) -> dict:
+        async with self.pool.connection() as connection, connection.transaction():
+            run = await self._owned(connection, owner, run_id, lock=True)
+            if run["kind"] != "generation" or run["state"] not in TERMINAL_STATES or run["current_revision"] != _uuid(revision_id):
+                raise StorageError("revision_conflict", "Save and select the latest article revision before preparing publication.")
+            article = await (await connection.execute(
+                "SELECT content_hash FROM article_revisions WHERE id=%s AND run_id=%s",
+                (_uuid(revision_id), _uuid(run_id)),
+            )).fetchone()
+            if not article or article["content_hash"] != content_hash:
+                raise StorageError("revision_conflict", "The saved article no longer matches this package.")
+            digest = canonical_hash({"inputs": inputs, "assessment_review_id": data.get("assessment_review_id"),
+                                     "article_review_status": data.get("article_review_status")})
+            existing = await (await connection.execute(
+                "SELECT * FROM publication_packages WHERE revision_id=%s AND input_hash=%s",
+                (_uuid(revision_id), digest),
+            )).fetchone()
+            if existing:
+                return _public(existing)
+            count = await (await connection.execute(
+                "SELECT count(*) AS n FROM publication_packages WHERE run_id=%s", (_uuid(run_id),),
+            )).fetchone()
+            assert count is not None
+            if count["n"] >= 50:
+                raise StorageError("package_limit", "This draft already has 50 saved packages. Start another draft to prepare more.", 422)
+            row = await (await connection.execute(
+                "INSERT INTO publication_packages(id,run_id,revision_id,content_hash,input_hash,data) "
+                "VALUES (%s,%s,%s,%s,%s,%s) RETURNING *",
+                (uuid4(), _uuid(run_id), _uuid(revision_id), content_hash, digest, Jsonb(data)),
+            )).fetchone()
+            return _public(row)
+
+    async def publication_packages(self, owner: str, run_id: str) -> list[dict]:
+        async with self.pool.connection() as connection:
+            run = await self._owned(connection, owner, run_id)
+            rows = await (await connection.execute(
+                "SELECT id,revision_id,content_hash,created_at FROM publication_packages "
+                "WHERE run_id=%s ORDER BY created_at DESC,id DESC LIMIT 50", (_uuid(run_id),),
+            )).fetchall()
+            return [{**_public(row), "stale": row["revision_id"] != run["current_revision"]} for row in rows]
+
+    async def publication_package(self, owner: str, run_id: str, package_id: str) -> dict:
+        async with self.pool.connection() as connection:
+            run = await self._owned(connection, owner, run_id)
+            row = await (await connection.execute(
+                "SELECT * FROM publication_packages WHERE id=%s AND run_id=%s",
+                (_uuid(package_id), _uuid(run_id)),
+            )).fetchone()
+            if not row:
+                raise StorageError("package_not_found", "Publication package not found.", 404)
+            assessment = await (await connection.execute(
+                "SELECT a.review_run_id FROM revision_assessments a JOIN runs j ON j.id=a.review_run_id "
+                "WHERE a.revision_id=%s AND j.deleted_at IS NULL "
+                "ORDER BY a.created_at DESC,a.review_run_id DESC LIMIT 1", (row["revision_id"],),
+            )).fetchone()
+            review_id = str(assessment["review_run_id"]) if assessment else None
+            stale = row["revision_id"] != run["current_revision"]
+            review_changed = review_id != row["data"].get("assessment_review_id")
+            return {**_public(row), "stale": stale or review_changed, "review_changed": review_changed}
+
+    async def record_publication(self, owner: str, run_id: str, package_id: str, record: dict) -> dict:
+        from datetime import UTC, timedelta
+
+        if datetime.fromisoformat(record["published_at"]) > datetime.now(UTC) + timedelta(minutes=5):
+            raise StorageError("invalid_publication_date", "Record a past publication date, not a future schedule.", 422)
+        async with self.pool.connection() as connection, connection.transaction():
+            await self._owned(connection, owner, run_id, lock=True)
+            package = await (await connection.execute(
+                "SELECT id FROM publication_packages WHERE id=%s AND run_id=%s",
+                (_uuid(package_id), _uuid(run_id)),
+            )).fetchone()
+            if not package:
+                raise StorageError("package_not_found", "Publication package not found.", 404)
+            existing = await (await connection.execute(
+                "SELECT * FROM publications WHERE package_id=%s AND platform=%s AND url=%s",
+                (_uuid(package_id), record["platform"], record["url"]),
+            )).fetchone()
+            if existing:
+                return _public(existing)
+            count = await (await connection.execute(
+                "SELECT count(*) AS n FROM publications WHERE package_id=%s", (_uuid(package_id),),
+            )).fetchone()
+            assert count is not None
+            if count["n"] >= 15:
+                raise StorageError("publication_limit", "This package already has 15 publication records.", 422)
+            row = await (await connection.execute(
+                "INSERT INTO publications(id,package_id,platform,url,published_at) VALUES (%s,%s,%s,%s,%s) RETURNING *",
+                (uuid4(), _uuid(package_id), record["platform"], record["url"], record["published_at"]),
+            )).fetchone()
+            return _public(row)
+
+    async def publication_history(self, owner: str, run_id: str) -> list[dict]:
+        async with self.pool.connection() as connection:
+            await self._owned(connection, owner, run_id)
+            rows = await (await connection.execute(
+                "SELECT p.*,k.revision_id,k.content_hash FROM publications p "
+                "JOIN publication_packages k ON k.id=p.package_id WHERE k.run_id=%s "
+                "ORDER BY p.published_at DESC,p.id DESC LIMIT 100", (_uuid(run_id),),
+            )).fetchall()
+            return _public(rows)
+
     async def _event(
         self, connection: Any, run_id: str | UUID, event_type: str, payload: dict, event_key: str
     ) -> dict:

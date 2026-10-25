@@ -15,6 +15,7 @@ markers = ["integration: requires a disposable real PostgreSQL database", "exter
 target-version = "py313"
 line-length = 100
 src = ["src"]
+extend-exclude = ["src/agentwriter/_vendor"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
@@ -23,9 +24,14 @@ select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
 python_version = "3.13"
 mypy_path = "src"
 packages = ["agentwriter"]
+exclude = ["src/agentwriter/_vendor/"]
 check_untyped_defs = true
 warn_unused_ignores = true
 no_implicit_optional = true
 
 [tool.uv]
 package = false
+
+[[tool.mypy.overrides]]
+module = ["agentwriter._vendor.*"]
+follow_imports = "skip"

@@ -8,6 +8,8 @@ from uuid import uuid4
 # immutable-edit endpoint receives this envelope; briefs retain their limit.
 MAX_EDIT_BYTES = 1_310_720
 EDIT_PATH = re.compile(r"^/api/v1/runs/[0-9a-fA-F-]{36}/revisions$")
+MAX_PUBLICATION_BYTES = 131_072
+PUBLICATION_PATH = re.compile(r"^/api/v1/runs/[0-9a-fA-F-]{36}/revisions/[0-9a-fA-F-]{36}/packages$")
 
 
 class BoundaryMiddleware:
@@ -36,7 +38,8 @@ class BoundaryMiddleware:
 
         if scope["method"] not in {"GET", "HEAD", "OPTIONS"}:
             editing = scope["method"] == "POST" and EDIT_PATH.fullmatch(scope["path"])
-            limit = MAX_EDIT_BYTES if editing else self.max_bytes
+            publishing = scope["method"] == "POST" and PUBLICATION_PATH.fullmatch(scope["path"])
+            limit = MAX_EDIT_BYTES if editing else MAX_PUBLICATION_BYTES if publishing else self.max_bytes
             body = bytearray()
             while True:
                 message = await receive()
@@ -44,7 +47,8 @@ class BoundaryMiddleware:
                     return
                 body.extend(message.get("body", b""))
                 if len(body) > limit:
-                    description = "The saved edit is too large." if editing else "The writing brief is too large."
+                    description = ("The saved edit is too large." if editing else "The publication drafts are too large."
+                                   if publishing else "The writing brief is too large.")
                     payload = json.dumps({"code": "body_too_large", "message": description,
                                           "retryable": False, "correlation_id": correlation_id}).encode()
                     await guarded_send({"type": "http.response.start", "status": 413,

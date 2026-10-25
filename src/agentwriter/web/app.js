@@ -1,3 +1,5 @@
+import { createPublishingController } from "./publishing.js";
+let publishing;
 // AgentWriter browser client.
 // Security boundary: untrusted Markdown is rendered with DOM text nodes only.
 // Raw HTML, images, remote assets and authored links are never inserted.
@@ -54,6 +56,7 @@ const state = {
   pendingKey: null,
   pendingPayload: null,
   editorDirty: false,
+  publicationDirty: false,
   conflictText: null,
   loadingArticle: false,
   saving: false,
@@ -159,7 +162,7 @@ function showWorkspace(view, focus = false) {
 }
 
 async function confirmDiscard() {
-  if (!state.editorDirty) return true;
+  if (!state.editorDirty && !state.publicationDirty) return true;
   const dialog = $("leave-dialog");
   dialog.returnValue = "stay";
   return new Promise((resolve) => {
@@ -177,6 +180,7 @@ async function openComposer(fresh = false) {
   state.articleTicket += 1;
   state.loadingArticle = false;
   state.editorDirty = false;
+  state.publicationDirty = false;
   state.conflictText = null;
   localStorage.removeItem("agentwriter.run");
   if (fresh) {
@@ -805,6 +809,7 @@ async function refreshHistory(append = false) {
 }
 
 function renderReview(article) {
+  publishing?.render();
   $("review-panel").hidden = false;
   const status = $("review-status");
   const messages = {
@@ -1012,7 +1017,7 @@ function renderSources(sources) {
       item.append(title);
     }
     const meta = document.createElement("small");
-    meta.textContent = `${source.provider || "unknown"} · retrieved ${source.retrieved_at || "unknown"} · ${source.extraction_state || "stored"}`;
+    meta.textContent = `${source.source_kind || "Unclassified source"} · ${source.provider || "unknown"} · published ${source.published_at || "unknown"} · updated ${source.updated_at || "unknown"} · retrieved ${source.retrieved_at || "unknown"} · ${source.extraction_state || "stored"}`;
     item.append(meta);
     list.append(item);
   }
@@ -1080,6 +1085,7 @@ function renderArticle() {
   renderReview(article);
   renderRevisionOptions();
   setDownload(article.id, article.content_hash);
+  publishing?.render();
   updateEditingControls();
   $("conflict").hidden = state.conflictText === null;
   if (state.conflictText !== null) $("conflict-message").textContent = state.conflictText;
@@ -1111,7 +1117,7 @@ async function loadArticle(revisionId = null) {
 }
 
 async function selectRun(id, options = {}) {
-  if (state.editorDirty) {
+  if (state.editorDirty || state.publicationDirty) {
     if (id === state.activeRun) { showWorkspace("draft", true); return; }
     if (!await confirmDiscard()) return;
   }
@@ -1126,6 +1132,7 @@ async function selectRun(id, options = {}) {
   state.events.clear();
   state.reconnectAttempts = 0;
   state.editorDirty = false;
+  state.publicationDirty = false;
   state.conflictText = null;
   state.historyMarked = null;
   state.articleTicket += 1;
@@ -1420,6 +1427,7 @@ async function refreshTopics() {
 }
 
 function wireEvents() {
+  publishing = createPublishingController({ api, state, showError, announce });
   $("refresh-topics").addEventListener("click", refreshTopics);
   $("new-draft").addEventListener("click", () => openComposer(true));
   $("library-new").addEventListener("click", () => openComposer(true));
@@ -1506,6 +1514,7 @@ function wireEvents() {
   });
   $("editor").addEventListener("input", () => {
     state.editorDirty = true;
+    publishing?.update();
     $("editor-count").textContent = `${$("editor").value.length.toLocaleString()} characters · unsaved changes`;
     updateReviewControls();
   });
@@ -1528,6 +1537,9 @@ function wireEvents() {
     }
     state.editorDirty = false;
     loadArticle(selected).catch(showError);
+  });
+  window.addEventListener("beforeunload", (event) => {
+    if (state.editorDirty || state.publicationDirty) { event.preventDefault(); event.returnValue = ""; }
   });
   window.addEventListener("online", () => {
     setConnection("Online", "live");

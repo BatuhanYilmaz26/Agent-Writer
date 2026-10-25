@@ -1,0 +1,5 @@
+Twitter Text Libraries for Python, swen128, version 3.0.0 (MIT).
+Source: https://github.com/swen128/twitter-text-python/releases/tag/v3.0.0
+PyPI wheel SHA-256: b36bd22e147db2234e79c73b021f10c3073e8c54f22b68c31696239b6917cdd3
+Local changes: relative package imports; Python 3.13 importlib.resources replaces the undeclared pkg_resources dependency. No parser rule changes.
+The upstream parser and bundled Unicode/TLD data are versioned; new emoji or TLD rules require an explicit update and conformance review.
