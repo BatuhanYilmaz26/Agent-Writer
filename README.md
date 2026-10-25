@@ -1,11 +1,14 @@
 # Fieldnote
 
-A source-aware technical writing studio built with **LangGraph, FastAPI and PostgreSQL**.
+Fieldnote is an application for researching, drafting and reviewing technical
+articles. It uses **LangGraph** to orchestrate LLM workflows, **FastAPI** for the
+application API, and **PostgreSQL** for checkpoints, research records and versioned
+articles.
 
-I built this as a personal **AI Engineering portfolio project** and a workspace
-for writing about AI, data science and machine learning. It turns a research brief
-into an editable article, keeps evidence alongside the text, and prepares posts
-for Medium, LinkedIn and X. The author controls the final wording and publication.
+The writing workspace combines editable Markdown with a source ledger, editorial
+assessments and revision history. It prepares publication bundles for Medium,
+LinkedIn and X, keeping research and review attached to the article as it moves
+from an initial brief to a publishable draft.
 
 [User guide](docs/user-guide.md) · [Setup](docs/setup-and-operations.md) · [Workflow](docs/workflow.md) · [CI](https://github.com/BatuhanYilmaz26/Fieldnote/actions/workflows/ci.yml)
 
@@ -13,22 +16,17 @@ for Medium, LinkedIn and X. The author controls the final wording and publicatio
 
 *Technical article sample edited in the local fixture profile; source and review data are synthetic.*
 
-## AI engineering in the project
+## Architecture
 
-The focus is the workflow around generation: explicit contracts, retained evidence,
-bounded execution and reviewable outputs.
+The FastAPI service accepts writing requests, stores their execution state and
+streams committed progress events to the browser. A separate worker executes a
+[LangGraph](https://docs.langchain.com/oss/python/langgraph/overview) `StateGraph`
+and persists checkpoints to PostgreSQL.
 
-| Engineering area | Implementation |
-|---|---|
-| **Stateful orchestration** | A [LangGraph](https://docs.langchain.com/oss/python/langgraph/overview) `StateGraph` with conditional research, parallel section drafting, assembly, editorial review and targeted rewrite limits. |
-| **Structured LLM outputs** | Pydantic contracts validate plans, section drafts and reviews; schema repair and model dispatches have explicit limits. |
-| **Evidence-grounded generation** | Bounded research adapters, stored source/excerpt identities and hashes, citation validation and conservative claim-support signals. |
-| **Durable execution** | PostgreSQL graph checkpoints, an independent worker, leased job ownership, idempotency, cancellation and replayable progress events. |
-| **Provider and cost controls** | OpenRouter routing, free-only defaults, request/token limits, budget accounting and explicit handling of provider failures. |
-| **Editorial control** | Immutable article revisions, assessments bound to exact content hashes, editable platform variants and manual publishing. |
-| **Evaluation** | A versioned fixture corpus, unit and real PostgreSQL integration tests, static checks and GitHub Actions CI. |
-
-## Writing workflow
+Research is selected according to the brief's policy. A validated plan allocates
+section budgets and evidence, sections are drafted concurrently, and the assembled
+article passes through citation checks and editorial review. Review findings can
+route selected sections through a bounded rewrite loop.
 
 ```mermaid
 flowchart LR
@@ -39,16 +37,28 @@ flowchart LR
     article --> author["Author review<br/>and export"]
 ```
 
-Generation runs in the worker, outside the HTTP request. Checkpoints and committed
-progress let the browser reconnect without owning the writing process.
+The browser can reconnect to persisted progress while generation continues in the
+worker. Saved edits create new article revisions, and each assessment belongs to
+the exact revision it reviewed.
 
-## In the workspace
+## Capabilities
 
-- Discover technical topics from publisher and research feeds, inspect dates and add primary sources.
-- Write in English, Turkish, Spanish, Portuguese or German, with your own angle and observations.
-- Compare title suggestions, edit Markdown, inspect evidence and preserve each saved revision.
-- Prepare search-preview metadata, LinkedIn/X drafts and a downloadable article bundle with an AI-assistance disclosure.
-- Reopen saved drafts and record the links to articles you publish yourself.
+- **Research and source inspection:** discover topics from publisher and research feeds, inspect source dates, and supply primary references and author observations.
+- **Multilingual drafting:** generate articles in English, Turkish, Spanish, Portuguese or German with a configurable audience, tone and target length.
+- **Editorial workflow:** compare headline suggestions, edit Markdown, inspect claim-support findings and request assessments of saved revisions.
+- **Publication preparation:** edit search-preview metadata and LinkedIn/X variants, validate platform lengths, and export article text, HTML, Markdown and references.
+- **Persistent workspace:** reopen drafts, inspect revision history and record published links against the corresponding article package.
+
+## Design decisions
+
+| Concern | Approach |
+|---|---|
+| **LLM output contracts** | Pydantic validates plans, section drafts and editorial reviews before downstream processing. Schema repair attempts have explicit limits. |
+| **Source traceability** | Sources and excerpts retain identifiers and content hashes. Citation links resolve through the stored ledger; claim-support checks surface gaps for review. |
+| **Execution ownership** | Leased jobs, idempotency and PostgreSQL checkpoints separate durable execution from individual HTTP requests and browser connections. |
+| **Bounded generation** | Section concurrency, rewrite rounds, request/token limits and cost reservations constrain each run. Free-only routing does not fall back to paid models. |
+| **Review integrity** | Immutable Markdown revisions and content hashes bind assessments and publication packages to specific article versions. Later edits start unassessed. |
+| **Operational visibility** | Persisted events, worker heartbeats, readiness checks, metrics and redacted structured logs expose progress and failures without logging provider credentials. |
 
 ## Technology
 
@@ -61,17 +71,32 @@ progress let the browser reconnect without owning the writing process.
 | Frontend | JavaScript modules, semantic HTML, CSS, safe Markdown rendering |
 | Development and operations | pytest, Ruff, Mypy, Docker Compose, GitHub Actions |
 
-## Scope and evaluation
+## Evaluation and verification
 
-This is a personal localhost application. The default fixture profile makes no
-live model or research requests and allows the workflow to be explored without
-provider credentials. Live providers require explicit configuration; free-only
-routing has no paid fallback and remains subject to provider availability.
+The versioned evaluation corpus covers workflow contracts, citation identity,
+research-policy enforcement, word budgets and adversarial inputs. Deterministic
+fixtures make these checks reproducible without consuming model quota.
 
-CI exercises software behavior with fixtures and a disposable PostgreSQL database.
-Live article quality is a separate acceptance check. A valid schema, citation or
-model assessment does not establish factual accuracy; review the article and
-sources before publishing. Posting to external platforms is manual.
+Unit and integration tests exercise the API, worker, PostgreSQL persistence,
+cancellation, replayable progress, revision history and budget accounting. GitHub
+Actions runs the fixture smoke test, corpus regression checks, automated tests,
+type checking and linting.
+
+These checks validate software behavior. Live article quality requires separate
+provider and editorial evaluation; citation validity and model assessments alone
+do not establish factual accuracy.
+
+## Local deployment
+
+Fieldnote runs as a browser workspace, API, worker and PostgreSQL database. The
+default fixture profile supports local exploration without provider credentials
+or external requests. Live model and research adapters require explicit
+configuration and remain subject to provider availability.
+
+Articles and platform variants are exported for manual publication. Review the
+claims, source dates, technical examples and AI-assistance disclosure before
+posting. Installation and operating instructions are in the
+[setup guide](docs/setup-and-operations.md).
 
 ## Documentation and code
 
