@@ -261,3 +261,7 @@ external font or icon service is contacted when you use the app.
 The local profile binds to loopback and must not be exposed publicly. Hosted OIDC,
 live provider qualification and human factual review are separate gates; see the
 root [README](../README.md#local-use-and-providers).
+
+### Saving a long edit
+
+Saved Markdown can contain up to 200,000 characters, including non-English text. Article edits have a separate upload limit; writing briefs retain their smaller limit. If an edit exceeds the limit, shorten it before saving. Every successful save creates a new, initially unassessed revision.

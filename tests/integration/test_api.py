@@ -220,8 +220,45 @@ async def test_cancel_invalid_cursor_body_limit_and_safe_errors(api_client) -> N
     )
     assert oversized.status_code == 413
     assert oversized.json()["code"] == "body_too_large"
+    assert oversized.headers["x-content-type-options"] == "nosniff"
+    assert oversized.headers["x-correlation-id"] == oversized.json()["correlation_id"]
+    assert "frame-ancestors 'none'" in oversized.headers["content-security-policy"]
     assert "x" * 100 not in oversized.text
     assert app.state.settings.max_request_bytes == 32_768
+
+
+async def test_large_unicode_saved_edit_has_separate_bounded_envelope(
+    api_client, acceptance_database: str,
+) -> None:
+    import json
+
+    from agentwriter.api.middleware import MAX_EDIT_BYTES
+
+    client, _ = api_client
+    run_id = (await enqueue(client, key="large-edit"))["id"]
+    await run_one_fixture_job(acceptance_database)
+    article = (await client.get(f"/api/v1/runs/{run_id}/article")).json()
+    markdown = "é" * 200_000
+    payload = json.dumps({"parent_revision": article["id"], "markdown": markdown})
+    assert len(payload) > 1_200_000
+    saved = await client.post(
+        f"/api/v1/runs/{run_id}/revisions", content=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    assert saved.status_code == 201, saved.text[:500]
+    assert saved.json()["citation_map"]["editable_markdown"] == markdown
+    assert saved.json()["review_status"] == "unassessed"
+    too_long = await client.post(
+        f"/api/v1/runs/{run_id}/revisions",
+        json={"parent_revision": saved.json()["id"], "markdown": "x" * 200_001},
+    )
+    assert too_long.status_code == 422
+    for path in (f"/api/v1/runs/{run_id}/revisions", "/api/v1/runs"):
+        oversized = await client.post(path, content=b"x" * (MAX_EDIT_BYTES + 1))
+        assert oversized.status_code == 413
+        assert oversized.headers["x-correlation-id"] == oversized.json()["correlation_id"]
+        assert "content-security-policy" in oversized.headers
+        assert ("saved edit" in oversized.json()["message"]) == path.endswith("/revisions")
 
 
 async def test_history_pagination_is_stable(api_client) -> None:
