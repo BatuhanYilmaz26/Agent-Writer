@@ -18,18 +18,31 @@ The browser starts a loopback-only local session automatically. A session expire
 after `SESSION_TTL_HOURS` (8 hours by default); reload the page to start a new
 one.
 
+The header also has a light/dark theme toggle. It follows your system colour
+scheme until you choose a theme; the choice is remembered in this browser
+(`agentwriter.theme`).
+
 ## Create a draft
+
+Choose **New draft** to open the writing studio. Start with your own topic or use
+**A practical guide**, **Explain an idea** or **Tell a story** as an editable
+starting point. The character counter helps you keep the topic within its limit.
+Use the word-target buttons for a quick choice, or enter another supported target.
+
+Open **Additional direction** for structure, exclusions or extra questions. These
+instructions are optional. The preferences beside the brief control the reader,
+tone, length and research mode.
 
 Fill in:
 
 | Field | Required | Notes |
 |---|---|---|
 | Topic | Yes | 1–500 characters. Be specific about the reader, promise and facts to check. |
-| Audience | Yes | 1–240 characters. Defaults to “General readers”. |
+| Reader | Yes | 1–240 characters. Defaults to “General readers”. |
 | Tone | Yes | One of the offered tones; stored with the brief. |
 | Target words | Yes | 500–3,000. |
 | Research | Yes | **Required**, **Automatic** or **Off**. |
-| Instructions | No | Up to 4,000 characters for structure, exclusions or questions. |
+| Additional direction → Anything else? | No | Up to 4,000 characters for structure, exclusions or questions. |
 
 ### Research modes
 
@@ -51,6 +64,13 @@ The draft panel shows `Queued`, `Writing`, `Waiting to retry`, `Cancelling`,
 `Needs review`, `Generated`, `Cancelled` or `Could not finish`. Progress is
 factual: sections completed, sources recorded and claims needing attention. There
 is no fabricated ETA.
+
+A stage list shows how far the run has reached — **Brief accepted → Research →
+Plan → Sections → Review**. Completed stages have a check and the current stage
+is highlighted. The progress summary shows counts such as `2/2` sections or
+`1 source`. A failed or cancelled run marks the stage where it stopped. While a
+draft is in **Needs review**, the Review stage remains open. Saving your edits
+creates an unassessed revision; it does not approve the article.
 
 - Closing the tab does not stop the run. Reopen it from **Recent drafts**.
 - A dropped live connection reconnects and reconciles from the durable run; it
@@ -75,6 +95,12 @@ gate and never claims factual approval.
 
 ## Edit and revisions
 
+The draft opens on a reading canvas, with editorial review, claim support,
+sources and saved revisions in **Behind the draft**. Expand the evidence groups
+you want to inspect. **Focus mode** gives the article more room and hides the
+navigation and evidence inspector; **Exit focus mode** brings them back. On a
+small screen, the inspector appears below the article.
+
 Switch to **Edit Markdown**, change the article and choose **Save new revision**.
 Human edits:
 
@@ -86,6 +112,10 @@ If the article changed while you were editing, the app preserves your text and
 offers **Reload latest draft**, **Save my text on the latest draft** or **Copy my
 text**. The revision chooser lists generated and human revisions with type, review
 status and time; selecting one previews that exact immutable revision.
+Leaving unsaved edits for a different draft, a new brief or a saved revision asks
+for confirmation. Opening the library keeps the current edit in memory; return
+with **Writing studio**. Reloading the page can lose unsaved text, so save before
+closing it.
 
 Raw HTML, images, external links and unsafe URL schemes are rejected in generated
 Markdown. The preview uses text nodes only.
@@ -93,7 +123,8 @@ Markdown. The preview uses text nodes only.
 ## Download
 
 **Download Markdown** downloads the selected revision, not a newer or older one.
-The page displays its SHA-256. To verify a download:
+The page displays its SHA-256 next to a **Copy** button that places the hash
+characters (without the `SHA-256` prefix) on the clipboard. To verify a download:
 
 ```powershell
 Get-FileHash .\draft.md -Algorithm SHA256
@@ -109,9 +140,17 @@ The computed hash must match the displayed hash exactly.
 
 ## History, reopening and deletion
 
-**Recent drafts** lists your durable runs with their accepted time and state.
+The sidebar's **Recent drafts** lists up to six recent durable runs with a state chip and relative time
+(such as “Needs review · 1 h ago”); the list refreshes when the selected run
+reaches a terminal state, so completed drafts are never shown as queued.
 Select one to recover its current revision and progress without regenerating it.
-Use **Load more** if the list is paginated.
+Open **Draft library** for draft cards, search and status filters. Search applies
+to the recent drafts currently loaded; **Load more drafts** includes older pages
+in the search. The count and summary show how many drafts are loaded rather than
+claiming to count unloaded records. The refresh button reloads the latest page.
+
+**Back to studio** opens the selected run's original brief for a new attempt.
+**New draft** clears the brief. Neither action removes a saved draft.
 
 **Delete run** asks for confirmation, then removes the run from history and clears
 the saved run id. Deletion is a durable tombstone: the run is no longer readable,
@@ -134,14 +173,28 @@ development identity; it is not a multi-tenant account system.
 
 ## Accessibility
 
+- On small screens, **Open navigation** reveals the sidebar. Choose a destination,
+  click outside it or press Escape to close it.
+- Ctrl+K (Command+K on macOS) opens and focuses library search. Ctrl+Enter
+  (Command+Enter) submits the brief while the composer is open.
 - The skip link moves focus to the main content.
 - The Preview/Edit tabs use arrow keys, Home and End.
 - Form controls have programmatic labels; status changes are announced; errors
   move focus to the error region.
-- Reduced-motion preferences are respected.
+- The stage list marks only the reachable stage with `aria-current="step"`.
+- Light and dark themes use a shared text-contrast palette; the theme toggle is
+  an accessible button (`aria-pressed`) and respects `prefers-color-scheme` until
+  changed.
+- Reduced-motion preferences are respected, including the stage pulse and loading
+  animation.
 - Long unbroken text does not create horizontal page overflow.
 
 A manual screen-reader pass is still recommended before a public release.
+
+The interface bundles [Manrope](https://github.com/google/fonts/tree/main/ofl/manrope)
+under the SIL Open Font License and [Heroicons](https://github.com/tailwindlabs/heroicons)
+under the MIT License. Their license notices ship with the local assets; no
+external font or icon service is contacted when you use the app.
 
 ## Troubleshooting
 

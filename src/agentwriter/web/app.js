@@ -55,6 +55,14 @@ const state = {
   editorDirty: false,
   conflictText: null,
   loadingArticle: false,
+  saving: false,
+  events: new Set(),
+  historyMarked: null,
+  history: [],
+  view: "compose",
+  articleTicket: 0,
+  historyTicket: 0,
+  evidenceLoading: false,
 };
 
 class ApiError extends Error {
@@ -79,6 +87,249 @@ function setConnection(text, tone = "") {
   connection.textContent = text;
   if (tone) connection.dataset.tone = tone;
   else delete connection.dataset.tone;
+}
+
+const THEME_KEY = "agentwriter.theme";
+
+function applyTheme(theme) {
+  const dark = theme === "dark";
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  const toggle = $("theme-toggle");
+  if (toggle) {
+    toggle.setAttribute("aria-pressed", String(dark));
+    $("theme-label").textContent = dark ? "Dark" : "Light";
+  }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", dark ? "#111622" : "#f5f6fa");
+}
+
+function loadStoredTheme() {
+  let stored = null;
+  try { stored = localStorage.getItem(THEME_KEY); } catch { stored = null; }
+  if (stored !== "light" && stored !== "dark") {
+    stored = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+  applyTheme(stored);
+}
+
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* storage unavailable */ }
+  applyTheme(next);
+  announce(`${next === "dark" ? "Dark" : "Light"} theme applied.`);
+}
+
+function closeNavigation() {
+  delete document.body.dataset.navigation;
+  $("menu-toggle").setAttribute("aria-expanded", "false");
+}
+
+function setFocusMode(enabled) {
+  document.body.dataset.focus = String(enabled);
+  $("focus-toggle").setAttribute("aria-pressed", String(enabled));
+  $("focus-toggle").textContent = enabled ? "Exit focus mode" : "Focus mode";
+}
+
+function showWorkspace(view, focus = false) {
+  state.view = view;
+  document.body.dataset.workspace = view;
+  for (const name of ["compose", "library", "draft"]) {
+    $(name === "compose" ? "composer-view" : `${name}-view`).hidden = name !== view;
+  }
+  $("workspace-label").textContent = view === "library" ? "Draft library" : "Writing studio";
+  $("nav-studio").toggleAttribute("aria-current", view !== "library");
+  $("nav-library").toggleAttribute("aria-current", view === "library");
+  if (view === "library") $("nav-library").setAttribute("aria-current", "page");
+  else $("nav-studio").setAttribute("aria-current", "page");
+  if (view !== "draft") setFocusMode(false);
+  closeNavigation();
+  document.title = view === "draft" && state.run
+    ? `${state.run.request.topic} — AgentWriter`
+    : `${view === "library" ? "Draft library" : "Writing studio"} — AgentWriter`;
+  if (focus) {
+    const target = view === "compose" ? "topic" : view === "library" ? "draft-search" : "draft-title";
+    $(target).focus();
+  }
+}
+
+async function confirmDiscard() {
+  if (!state.editorDirty) return true;
+  const dialog = $("leave-dialog");
+  dialog.returnValue = "stay";
+  return new Promise((resolve) => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "leave"), { once: true });
+    dialog.showModal();
+  });
+}
+
+async function openComposer(fresh = false) {
+  if (!await confirmDiscard()) return;
+  stopObserving();
+  state.activeRun = null;
+  state.run = null;
+  state.article = null;
+  state.articleTicket += 1;
+  state.loadingArticle = false;
+  state.editorDirty = false;
+  state.conflictText = null;
+  localStorage.removeItem("agentwriter.run");
+  if (fresh) {
+    $("brief-form").reset();
+    $("brief-extra").open = false;
+    state.pendingKey = null;
+    state.pendingPayload = null;
+  }
+  $("empty").hidden = false;
+  clearError();
+  updateBriefDetails();
+  renderHistory();
+  showWorkspace("compose", true);
+}
+
+function updateBriefDetails() {
+  $("topic-count").textContent = `${$("topic").value.length} / 500`;
+  const words = Number($("target_words").value);
+  for (const button of document.querySelectorAll("[data-words]")) {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.words) === words));
+  }
+  researchWarning();
+}
+
+function statusTag(run) {
+  const tag = document.createElement("span");
+  tag.className = "pill";
+  tag.dataset.state = run.state;
+  tag.textContent = STATE_LABELS[run.state] || run.state;
+  return tag;
+}
+
+function documentIcon() {
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("class", "icon");
+  icon.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", "/assets/icons.svg#document");
+  icon.append(use);
+  return icon;
+}
+
+function renderHistory() {
+  const history = $("history");
+  history.replaceChildren();
+  $("library-count").textContent = `${state.history.length}${state.nextCursor ? "+" : ""}`;
+  if (!state.history.length) {
+    const empty = document.createElement("li");
+    empty.className = "history-placeholder";
+    empty.textContent = "Your next idea has a home here. Start a brief to save your first draft.";
+    history.append(empty);
+  }
+  for (const run of state.history.slice(0, 6)) {
+    const item = document.createElement("li");
+    if (run.id === state.activeRun) item.setAttribute("aria-current", "true");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "history-item";
+    const topic = document.createElement("span");
+    topic.className = "history-topic";
+    topic.textContent = run.request.topic;
+    const meta = document.createElement("span");
+    meta.className = "history-meta";
+    const status = document.createElement("span");
+    status.className = "history-state";
+    status.dataset.state = run.state;
+    status.textContent = STATE_LABELS[run.state] || run.state;
+    const time = document.createElement("span");
+    time.textContent = relativeTime(run.accepted_at);
+    meta.append(status, time);
+    button.append(topic, meta);
+    button.addEventListener("click", () => selectRun(run.id).catch(showError));
+    item.append(button);
+    history.append(item);
+  }
+  renderLibrary();
+}
+
+function renderLibrary() {
+  const query = $("draft-search").value.trim().toLocaleLowerCase();
+  const filter = $("draft-filter").value;
+  const rows = state.history.filter((run) => {
+    const statusMatches = filter === "all" || (filter === "running" ? !TERMINAL.has(run.state) : run.state === filter);
+    return statusMatches && run.request.topic.toLocaleLowerCase().includes(query);
+  });
+  $("library-summary").textContent = state.history.length
+    ? `${rows.length} of ${state.history.length} recent draft${state.history.length === 1 ? "" : "s"}${state.nextCursor ? " · More saved drafts are available below." : ""}`
+    : "Every saved draft will be here, ready to reopen.";
+  const list = $("library-list");
+  list.replaceChildren();
+  if (!rows.length) {
+    const item = document.createElement("li");
+    item.className = "library-empty";
+    const title = document.createElement("strong");
+    title.textContent = state.history.length ? "No matching drafts." : "A blank page, full of possibility.";
+    const detail = document.createElement("p");
+    detail.textContent = state.history.length ? "Try another phrase or choose All statuses." : "Create your first draft. Your sources, progress and revisions will stay together.";
+    item.append(title, detail);
+    list.append(item);
+  }
+  for (const run of rows) {
+    const item = document.createElement("li");
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "library-card";
+    const head = document.createElement("span");
+    head.className = "library-card-head";
+    const mark = document.createElement("span");
+    mark.className = "library-file";
+    mark.append(documentIcon());
+    mark.setAttribute("aria-hidden", "true");
+    head.append(mark, statusTag(run));
+    const title = document.createElement("span");
+    title.className = "library-card-title";
+    title.textContent = run.request.topic;
+    const meta = document.createElement("span");
+    meta.className = "library-card-meta";
+    const length = document.createElement("span");
+    length.textContent = `${Number(run.request.target_words || 0).toLocaleString()} word brief`;
+    const date = document.createElement("span");
+    date.textContent = relativeTime(run.accepted_at);
+    meta.append(length, date);
+    card.append(head, title, meta);
+    card.addEventListener("click", () => selectRun(run.id).catch(showError));
+    item.append(card);
+    list.append(item);
+  }
+  $("more").hidden = !state.nextCursor;
+}
+
+function relativeTime(value) {
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return "";
+  const minutes = Math.round((Date.now() - time) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} d ago`;
+  return new Date(value).toLocaleDateString();
+}
+
+async function copyHash() {
+  const text = $("hash").textContent.trim();
+  if (!text) {
+    announce("No revision hash is shown yet.");
+    return;
+  }
+  const hash = text.replace(/^SHA-256\s+/, "");
+  try {
+    await navigator.clipboard.writeText(hash);
+    announce("Revision hash copied to the clipboard.");
+  } catch {
+    announce(`Revision hash: ${hash}`);
+  }
 }
 
 function clearError() {
@@ -317,14 +568,17 @@ function scheduleRefresh() {
 function connectStream() {
   if (!state.activeRun || !state.run || TERMINAL.has(state.run.state)) return;
   if (state.stream) state.stream.close();
+  const requestedRun = state.activeRun;
   const cursor = state.lastEventId ? `?after=${encodeURIComponent(state.lastEventId)}` : "";
   const stream = new EventSource(`/api/v1/runs/${state.activeRun}/events${cursor}`);
   state.stream = stream;
   stream.onopen = () => {
+    if (state.stream !== stream || requestedRun !== state.activeRun) return;
     state.reconnectAttempts = 0;
     setConnection("Live progress", "live");
   };
   stream.onerror = () => {
+    if (state.stream !== stream || requestedRun !== state.activeRun) return;
     if (!state.activeRun || !state.run || TERMINAL.has(state.run.state)) {
       stream.close();
       return;
@@ -341,18 +595,22 @@ function connectStream() {
     }, delay);
   };
   const onEvent = (event) => {
+    if (state.stream !== stream || requestedRun !== state.activeRun) return;
     let payload = {};
     try { payload = JSON.parse(event.data); } catch { payload = {}; }
     const sequence = Number(event.lastEventId || payload.sequence || 0);
     if (Number.isFinite(sequence) && sequence > state.lastEventId) state.lastEventId = sequence;
     const label = EVENT_LABELS[event.type] || event.type.replaceAll("_", " ");
+    state.events.add(event.type);
+    renderPipeline();
     const progress = $("progress");
-    if (progress) progress.textContent = `${label} · ${formatProgress(state.run)}`;
+    if (progress) progress.textContent = label;
     announce(label);
     scheduleRefresh();
   };
   for (const name of EVENT_NAMES) stream.addEventListener(name, onEvent);
   stream.addEventListener("stream_error", () => {
+    if (state.stream !== stream || requestedRun !== state.activeRun) return;
     stopObserving();
     setConnection("Reloading progress…", "offline");
     refreshRun().catch(showError);
@@ -365,17 +623,103 @@ function formatProgress(run) {
   if (Number.isInteger(progress.sections) && Number.isInteger(progress.tasks) && progress.tasks > 0) {
     parts.push(`${progress.sections}/${progress.tasks} sections`);
   }
-  if (Number.isInteger(progress.sources)) parts.push(`${progress.sources} sources`);
+  if (Number.isInteger(progress.sources)) parts.push(`${progress.sources} source${progress.sources === 1 ? "" : "s"}`);
   if (Number.isInteger(progress.unsupported_claims) && progress.unsupported_claims > 0) {
     parts.push(`${progress.unsupported_claims} claims need attention`);
   }
   return parts.length ? parts.join(" · ") : "Waiting for the first durable update.";
 }
 
+const PIPELINE = [
+  ["accepted", "Brief accepted"],
+  ["research", "Research"],
+  ["plan", "Plan"],
+  ["sections", "Sections"],
+  ["review", "Review"],
+];
+
+function pipelineReached(run) {
+  // Deepest stage this run is known to have reached, inferred from live
+  // stream events (state.events) plus the durable progress on the run.
+  const seen = state.events;
+  const progress = run && run.progress ? run.progress : {};
+  const sources = Number(progress.sources) || 0;
+  const sections = Number(progress.sections) || 0;
+  let reached = 0;
+  if (run.state === "running" || seen.has("policy_ready")
+    || seen.has("research_completed") || seen.has("source_added") || sources > 0) reached = 1;
+  if (seen.has("plan_ready")) reached = 2;
+  if (seen.has("section_completed") || sections > 0) reached = Math.max(reached, 3);
+  if (seen.has("review_completed") || run.state === "needs_review" || run.state === "succeeded") reached = 4;
+  return reached;
+}
+
+function renderPipeline() {
+  const pipeline = $("pipeline");
+  const run = state.run;
+  pipeline.replaceChildren();
+  if (!run) return;
+  const reached = pipelineReached(run);
+  const halted = run.state === "failed" || run.state === "cancelled";
+  const completed = run.state === "succeeded";
+  const progress = run.progress || {};
+  const sources = Number(progress.sources) || 0;
+  const suffixes = {
+    research: sources > 0 ? `${sources} source${sources === 1 ? "" : "s"}` : "",
+    sections: Number.isInteger(progress.tasks) && progress.tasks > 0
+      ? `${progress.sections}/${progress.tasks}`
+      : "",
+    review: Number(progress.unsupported_claims) > 0
+      ? `${progress.unsupported_claims} to check`
+      : "",
+  };
+  for (const [index, [stageId, label]] of PIPELINE.entries()) {
+    const item = document.createElement("li");
+    item.dataset.stage = stageId;
+    if (index < reached || completed) item.dataset.status = "done";
+    else if (index === reached) item.dataset.status = halted ? "halted" : "active";
+    else item.dataset.status = "pending";
+    const mark = document.createElement("span");
+    mark.className = "stage-mark";
+    mark.setAttribute("aria-hidden", "true");
+    const name = document.createElement("span");
+    name.className = "stage-name";
+    name.textContent = label;
+    item.append(mark, name);
+    const value = suffixes[stageId];
+    if (value) {
+      const chip = document.createElement("span");
+      chip.className = "stage-value";
+      chip.textContent = value;
+      item.append(chip);
+    }
+    if (index === reached && !halted && !completed) item.setAttribute("aria-current", "step");
+    pipeline.append(item);
+  }
+}
+
 function renderRun(run) {
+  const previousRevision = state.run && state.run.current_revision;
   state.run = run;
-  $("state").textContent = STATE_LABELS[run.state] || run.state;
+  $("draft-title").textContent = run.request.topic;
+  if (state.view === "draft") document.title = `${run.request.topic} — AgentWriter`;
+  const statePill = $("state");
+  statePill.textContent = STATE_LABELS[run.state] || run.state;
+  statePill.dataset.state = run.state;
   $("progress").textContent = run.error_message || formatProgress(run);
+  const finished = TERMINAL.has(run.state);
+  $("draft-loading").dataset.finished = String(finished);
+  $("loading-title").textContent = run.current_revision ? "Opening your saved draft" : finished ? STATE_LABELS[run.state] || "Run finished" : "Working on your draft";
+  $("loading-note").textContent = run.current_revision
+    ? "Loading its exact revision, sources and review."
+    : finished
+    ? run.error_message || "This run ended without an article revision. You can edit the brief and start a new draft."
+    : "Each step is saved as it happens. You can come back any time.";
+  $("retry-brief").hidden = !finished || Boolean(run.current_revision);
+  $("revision").disabled = !run.current_revision;
+  $("copy-hash").disabled = !run.current_revision;
+  if (Number(run.progress && run.progress.sources) > state.ledger.size) refreshEvidence().catch(() => {});
+  renderPipeline();
   $("cancel").hidden = TERMINAL.has(run.state);
   $("cancel").disabled = run.state === "cancel_requested";
   $("cancel").textContent = run.state === "cancel_requested" ? "Cancelling…" : "Cancel run";
@@ -394,7 +738,14 @@ function renderRun(run) {
     stopObserving();
     setConnection("Saved", "live");
     $("run-note").textContent = "This run is saved. Reopen it from Recent drafts at any time.";
-    if (run.current_revision) loadArticle().catch(showError);
+    if (state.historyMarked !== run.id) {
+      state.historyMarked = run.id;
+      refreshHistory().catch(() => {});
+    }
+    if (run.current_revision && !state.editorDirty && (!state.article
+        || (previousRevision !== run.current_revision && state.article.id !== run.current_revision))) {
+      loadArticle().catch(showError);
+    }
   } else {
     $("run-note").textContent = "Your run continues even if you close this page. Reopen it from Recent drafts.";
     if (!state.stream) connectStream();
@@ -409,39 +760,38 @@ function renderRun(run) {
 
 async function refreshRun() {
   if (!state.activeRun) return null;
-  const run = await api(`/api/v1/runs/${state.activeRun}`);
+  const requestedRun = state.activeRun;
+  const run = await api(`/api/v1/runs/${requestedRun}`);
+  if (requestedRun !== state.activeRun) return null;
   renderRun(run);
   return run;
 }
 
+async function refreshEvidence() {
+  if (!state.activeRun || state.evidenceLoading) return;
+  const requestedRun = state.activeRun;
+  state.evidenceLoading = true;
+  try {
+    const data = await api(`/api/v1/runs/${requestedRun}/sources?limit=100`);
+    if (requestedRun !== state.activeRun) return;
+    state.ledger = new Map(data.sources.map((source) => [source.id, source]));
+    renderSources(data.sources);
+  } finally {
+    state.evidenceLoading = false;
+  }
+}
+
 async function refreshHistory(append = false) {
+  const ticket = ++state.historyTicket;
   const before = append && state.nextCursor
     ? `&before=${encodeURIComponent(state.nextCursor)}`
     : "";
   const data = await api(`/api/v1/runs?limit=20${before}`);
-  const history = $("history");
-  if (!append) history.replaceChildren();
-  if (!append && !data.runs.length) {
-    const empty = document.createElement("li");
-    empty.className = "help";
-    empty.textContent = "Your saved runs will appear here.";
-    history.append(empty);
-  }
-  for (const run of data.runs) {
-    const item = document.createElement("li");
-    if (run.id === state.activeRun) item.setAttribute("aria-current", "true");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = run.request.topic;
-    const meta = document.createElement("small");
-    meta.textContent = `${new Date(run.accepted_at).toLocaleString()} · ${STATE_LABELS[run.state] || run.state}`;
-    button.append(meta);
-    button.addEventListener("click", () => selectRun(run.id).catch(showError));
-    item.append(button);
-    history.append(item);
-  }
+  if (ticket !== state.historyTicket) return;
+  const combined = append ? [...state.history, ...data.runs] : data.runs;
+  state.history = [...new Map(combined.map((run) => [run.id, run])).values()];
   state.nextCursor = data.next_cursor;
-  $("more").hidden = !state.nextCursor;
+  renderHistory();
 }
 
 function renderReview(article) {
@@ -459,6 +809,7 @@ function renderReview(article) {
   const issues = $("issues");
   issues.replaceChildren();
   const findings = Array.isArray(article.issues) ? article.issues : [];
+  $("issue-count").textContent = String(findings.length);
   for (const issue of findings) {
     const item = document.createElement("li");
     item.dataset.severity = issue.severity || "info";
@@ -484,6 +835,7 @@ function renderReview(article) {
   const claims = $("claims");
   claims.replaceChildren();
   const assessments = Array.isArray(article.claims) ? article.claims : [];
+  $("claim-count").textContent = String(assessments.length);
   for (const claim of assessments) {
     const item = document.createElement("li");
     item.dataset.assessment = claim.assessment || "unassessed";
@@ -510,6 +862,7 @@ function renderReview(article) {
 }
 
 function renderSources(sources) {
+  $("source-count").textContent = String(sources.length);
   const list = $("sources");
   list.replaceChildren();
   for (const source of sources) {
@@ -535,7 +888,7 @@ function renderSources(sources) {
   if (!sources.length) {
     const item = document.createElement("li");
     item.className = "help";
-    item.textContent = "No external sources were used for this draft.";
+    item.textContent = "No sources have been stored for this draft.";
     list.append(item);
   }
 }
@@ -558,7 +911,10 @@ function updateEditingControls() {
   const latest = state.revisions.length ? state.revisions[0].id : null;
   const selected = state.article ? state.article.id : null;
   $("save").hidden = !editing;
-  $("save").disabled = !editing || !selected || selected !== latest;
+  $("save").disabled = state.saving || !editing || !selected || selected !== latest;
+  $("save").setAttribute("aria-busy", String(state.saving));
+  $("save").textContent = state.saving ? "Saving…" : "Save new revision";
+  $("editor").readOnly = state.saving;
   $("save").title = selected && latest && selected !== latest
     ? "Select the latest revision before saving an edit."
     : "";
@@ -579,6 +935,9 @@ function renderRevisionOptions() {
 function renderArticle() {
   const article = state.article;
   $("article-view").hidden = false;
+  $("draft-loading").hidden = true;
+  const wordCount = article.markdown.trim().split(/\s+/).filter(Boolean).length;
+  $("reading-stats").textContent = `${wordCount.toLocaleString()} words · ${Math.max(1, Math.ceil(wordCount / 220))} min read`;
   const editable = article.citation_map && article.citation_map.editable_markdown
     ? article.citation_map.editable_markdown
     : article.markdown;
@@ -597,6 +956,8 @@ function renderArticle() {
 async function loadArticle(revisionId = null) {
   if (!state.activeRun || state.loadingArticle) return;
   state.loadingArticle = true;
+  const ticket = ++state.articleTicket;
+  const requestedRun = state.activeRun;
   try {
     const query = revisionId ? `?revision=${encodeURIComponent(revisionId)}` : "";
     const [article, evidence, versions] = await Promise.all([
@@ -604,6 +965,7 @@ async function loadArticle(revisionId = null) {
       api(`/api/v1/runs/${state.activeRun}/sources?limit=100`),
       api(`/api/v1/runs/${state.activeRun}/revisions`),
     ]);
+    if (ticket !== state.articleTicket || requestedRun !== state.activeRun) return;
     state.article = article;
     state.revisions = versions.revisions || [];
     state.ledger = new Map((evidence.sources || []).map((source) => [source.id, source]));
@@ -612,11 +974,15 @@ async function loadArticle(revisionId = null) {
     $("empty").hidden = true;
     $("run-view").hidden = false;
   } finally {
-    state.loadingArticle = false;
+    if (ticket === state.articleTicket) state.loadingArticle = false;
   }
 }
 
 async function selectRun(id, options = {}) {
+  if (state.editorDirty) {
+    if (id === state.activeRun) { showWorkspace("draft", true); return; }
+    if (!await confirmDiscard()) return;
+  }
   stopObserving();
   clearError();
   state.activeRun = id;
@@ -625,9 +991,15 @@ async function selectRun(id, options = {}) {
   state.revisions = [];
   state.ledger = new Map();
   state.lastEventId = 0;
+  state.events.clear();
   state.reconnectAttempts = 0;
   state.editorDirty = false;
   state.conflictText = null;
+  state.historyMarked = null;
+  state.articleTicket += 1;
+  state.loadingArticle = false;
+  showWorkspace("draft");
+  $("draft-loading").hidden = false;
   localStorage.setItem("agentwriter.run", id);
   $("empty").hidden = true;
   $("run-view").hidden = false;
@@ -636,18 +1008,42 @@ async function selectRun(id, options = {}) {
   $("limitations-panel").hidden = true;
   $("issues").replaceChildren();
   $("claims").replaceChildren();
+  $("issue-count").textContent = "0";
+  $("claim-count").textContent = "0";
+  $("revision").replaceChildren();
+  $("revision").disabled = true;
+  $("hash").textContent = "";
+  $("copy-hash").disabled = true;
+  $("reading-stats").textContent = "";
+  $("draft-title").textContent = "Opening draft…";
+  renderSources([]);
+  $("progress").textContent = "";
+  $("state").textContent = "Loading run…";
+  delete $("state").dataset.state;
+  renderPipeline();
   try {
     const run = await refreshRun();
-    if (run && TERMINAL.has(run.state)) await loadArticle();
+    if (state.activeRun !== id) return;
+    if (run) {
+      for (const field of ["topic", "audience", "tone", "target_words", "research_mode", "instructions"]) {
+        $(field).value = run.request[field] ?? "";
+      }
+      $("brief-extra").open = Boolean(run.request.instructions);
+      updateBriefDetails();
+    }
+    if (run && run.current_revision && TERMINAL.has(run.state)) await loadArticle();
     await refreshHistory();
     if (!options.restore) $("draft-title").focus();
   } catch (error) {
+    if (state.activeRun !== id) return;
     if (error instanceof ApiError && error.status === 404) {
       localStorage.removeItem("agentwriter.run");
       state.activeRun = null;
       $("run-view").hidden = true;
       $("empty").hidden = false;
+      showWorkspace("compose");
       $("state").textContent = "No run selected";
+      delete $("state").dataset.state;
       announce("That draft is no longer available.");
       return;
     }
@@ -706,7 +1102,7 @@ async function submitBrief(event) {
   const button = $("submit");
   button.disabled = true;
   button.setAttribute("aria-busy", "true");
-  button.textContent = "Creating draft…";
+  $("submit-label").textContent = "Creating draft…";
   try {
     const result = await api("/api/v1/runs", {
       method: "POST",
@@ -727,7 +1123,7 @@ async function submitBrief(event) {
   } finally {
     button.disabled = false;
     button.removeAttribute("aria-busy");
-    button.textContent = "Create draft ↗";
+    $("submit-label").textContent = "Create draft";
   }
 }
 
@@ -738,35 +1134,46 @@ function editing(enabled) {
   $("edit-tab").setAttribute("aria-selected", String(enabled));
   $("preview-tab").tabIndex = enabled ? -1 : 0;
   $("edit-tab").tabIndex = enabled ? 0 : -1;
+  updateEditingControls();
   if (enabled) {
-    updateEditingControls();
     $("editor").focus();
   } else {
     const previewText = state.editorDirty || !state.article
       ? $("editor").value
       : state.article.markdown;
     renderMarkdown($("preview"), previewText);
+    if (state.editorDirty) {
+      $("reading-stats").textContent = "Unsaved preview";
+      $("review-status").textContent = "You are previewing unsaved changes. Save a new revision to preserve them. This text has not been assessed.";
+      $("review-status").dataset.status = "unassessed";
+    }
     $("preview-tab").focus();
   }
 }
 
 async function saveEdit(parentRevision = null) {
   clearError();
-  if (!state.article || !state.activeRun) return;
+  if (!state.article || !state.activeRun || state.saving) return;
+  const requestedRun = state.activeRun;
   const parent = parentRevision || state.article.id;
   const markdown = $("editor").value;
+  state.saving = true;
+  updateEditingControls();
   try {
-    const created = await api(`/api/v1/runs/${state.activeRun}/revisions`, {
+    const created = await api(`/api/v1/runs/${requestedRun}/revisions`, {
       method: "POST",
       body: { parent_revision: parent, markdown },
     });
+    if (requestedRun !== state.activeRun) return;
     state.conflictText = null;
     state.editorDirty = false;
     editing(false);
     await loadArticle(created.id);
+    await refreshRun();
     announce("New revision saved. Human edits remain unassessed.");
     $("review-status").focus();
   } catch (error) {
+    if (requestedRun !== state.activeRun) return;
     if (error instanceof ApiError && error.code === "revision_conflict") {
       state.conflictText = "The article changed while you were editing. Your text is still here. Reload the latest draft, or save your text as a new revision on the latest draft.";
       $("conflict").hidden = false;
@@ -776,6 +1183,9 @@ async function saveEdit(parentRevision = null) {
       return;
     }
     showError(error);
+  } finally {
+    state.saving = false;
+    updateEditingControls();
   }
 }
 
@@ -827,7 +1237,9 @@ async function deleteRun() {
     $("run-view").hidden = true;
     $("empty").hidden = false;
     $("state").textContent = "No run selected";
+    delete $("state").dataset.state;
     await refreshHistory();
+    showWorkspace("compose");
     announce("Draft deleted.");
   } catch (error) {
     showError(error);
@@ -835,12 +1247,63 @@ async function deleteRun() {
 }
 
 function wireEvents() {
+  $("new-draft").addEventListener("click", () => openComposer(true));
+  $("library-new").addEventListener("click", () => openComposer(true));
+  $("back-to-brief").addEventListener("click", () => openComposer(false));
+  $("retry-brief").addEventListener("click", () => openComposer(false));
+  $("nav-studio").addEventListener("click", () => showWorkspace(state.activeRun ? "draft" : "compose", true));
+  for (const id of ["nav-library", "view-library"]) {
+    $(id).addEventListener("click", () => { renderLibrary(); showWorkspace("library", true); });
+  }
+  $("draft-search").addEventListener("input", renderLibrary);
+  $("draft-filter").addEventListener("change", renderLibrary);
+  $("focus-toggle").addEventListener("click", () => setFocusMode(document.body.dataset.focus !== "true"));
+  $("menu-toggle").addEventListener("click", (event) => {
+    event.stopPropagation();
+    const open = document.body.dataset.navigation !== "open";
+    if (open) document.body.dataset.navigation = "open";
+    else closeNavigation();
+    $("menu-toggle").setAttribute("aria-expanded", String(open));
+  });
+  document.addEventListener("click", (event) => {
+    if (document.body.dataset.navigation === "open" && !$("sidebar").contains(event.target)) closeNavigation();
+  });
+  document.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      event.preventDefault();
+      showWorkspace("library", true);
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && state.view === "compose") {
+      event.preventDefault();
+      if (!$("submit").disabled) $("brief-form").requestSubmit();
+    }
+    if (event.key === "Escape" && document.body.dataset.navigation === "open") {
+      closeNavigation();
+      $("menu-toggle").focus();
+    }
+  });
+  for (const button of document.querySelectorAll("[data-brief]")) {
+    button.addEventListener("click", () => {
+      $("topic").value = button.dataset.brief;
+      updateBriefDetails();
+      $("topic").focus();
+    });
+  }
+  for (const button of document.querySelectorAll("[data-words]")) {
+    button.addEventListener("click", () => {
+      $("target_words").value = button.dataset.words;
+      updateBriefDetails();
+    });
+  }
+  $("target_words").addEventListener("input", updateBriefDetails);
   $("brief-form").addEventListener("submit", submitBrief);
-  $("topic").addEventListener("input", researchWarning);
+  $("topic").addEventListener("input", updateBriefDetails);
   $("instructions").addEventListener("input", researchWarning);
   $("research_mode").addEventListener("change", researchWarning);
   $("cancel").addEventListener("click", cancelRun);
   $("delete").addEventListener("click", deleteRun);
+  $("theme-toggle").addEventListener("click", toggleTheme);
+  $("copy-hash").addEventListener("click", copyHash);
   $("refresh").addEventListener("click", () => refreshHistory().catch(showError));
   $("more").addEventListener("click", () => refreshHistory(true).catch(showError));
   $("preview-tab").addEventListener("click", () => editing(false));
@@ -880,8 +1343,12 @@ function wireEvents() {
   });
   $("conflict-save").addEventListener("click", recoverOnLatest);
   $("conflict-copy").addEventListener("click", copyEditorText);
-  $("revision").addEventListener("change", () => {
+  $("revision").addEventListener("change", async () => {
     const selected = $("revision").value;
+    if (!await confirmDiscard()) {
+      $("revision").value = state.article.id;
+      return;
+    }
     state.editorDirty = false;
     loadArticle(selected).catch(showError);
   });
@@ -900,7 +1367,10 @@ function wireEvents() {
 }
 
 async function start() {
+  loadStoredTheme();
   wireEvents();
+  updateBriefDetails();
+  showWorkspace("compose");
   try {
     let session;
     try {
@@ -913,13 +1383,18 @@ async function start() {
       }
     }
     state.csrf = session.csrf_token;
+    $("submit").disabled = false;
     setConnection(session.fixture ? "Local fixture profile" : "Local profile", "live");
-    $("notice").textContent = session.fixture
+    $("notice-text").textContent = session.fixture
       ? "Local fixture profile: synthetic model and research fixtures. No live AI or web research is used."
       : "Local profile. Check the configured provider and evidence labels before publishing.";
     await refreshHistory();
     const saved = localStorage.getItem("agentwriter.run");
-    if (saved) await selectRun(saved, { restore: true }).catch(showError);
+    // A session restore must not replace navigation or a brief the person
+    // started while the initial history request was still in flight.
+    if (saved && state.view === "compose" && !state.activeRun && !$("topic").value.trim()) {
+      await selectRun(saved, { restore: true }).catch(showError);
+    }
   } catch (error) {
     setConnection("Service unavailable", "offline");
     showError(error);
