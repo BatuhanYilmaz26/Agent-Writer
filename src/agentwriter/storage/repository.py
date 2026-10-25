@@ -112,6 +112,36 @@ class Repository:
             raise StorageError("not_found", "Run not found", 404)
         return row
 
+    async def topic_snapshot(self, owner: str, *, refresh: bool = False) -> tuple[dict | None, bool]:
+        """One refresh per owner per five minutes, serialized across replicas."""
+        async with self.pool.connection() as connection, connection.transaction():
+            if refresh:
+                row = await (await connection.execute(
+                    "INSERT INTO topic_discovery(owner_id) VALUES (%s) ON CONFLICT(owner_id) "
+                    "DO UPDATE SET started_at=clock_timestamp() "
+                    "WHERE topic_discovery.started_at<clock_timestamp()-interval '5 minutes' RETURNING owner_id",
+                    (owner,),
+                )).fetchone()
+                if row:
+                    return None, True
+            row = await (await connection.execute(
+                "SELECT snapshot FROM topic_discovery WHERE owner_id=%s", (owner,),
+            )).fetchone()
+            return row["snapshot"] if row else None, False
+
+    async def save_topic_snapshot(self, owner: str, snapshot: dict) -> None:
+        async with self.pool.connection() as connection:
+            await connection.execute("UPDATE topic_discovery SET snapshot=%s WHERE owner_id=%s",
+                                     (Jsonb(snapshot), owner))
+
+    async def previous_briefs(self, owner: str) -> list[dict]:
+        async with self.pool.connection() as connection:
+            rows = await (await connection.execute(
+                "SELECT request FROM runs WHERE owner_id=%s AND kind='generation' "
+                "AND deleted_at IS NULL ORDER BY accepted_at DESC,id DESC LIMIT 200", (owner,),
+            )).fetchall()
+            return [row["request"] for row in rows]
+
     async def _event(
         self, connection: Any, run_id: str | UUID, event_type: str, payload: dict, event_key: str
     ) -> dict:

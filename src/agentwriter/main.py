@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
+import httpx
 from fastapi import Depends, FastAPI, Header, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
@@ -36,6 +37,7 @@ from agentwriter.api.security import (
 )
 from agentwriter.domain import TERMINAL_STATES, CreateRunRequest
 from agentwriter.services.citations import CitationError, render_citations, validate_citations
+from agentwriter.services.topics import collect_feeds, rank_topics
 from agentwriter.settings import Settings
 from agentwriter.storage.pool import database_pool
 from agentwriter.storage.repository import Repository, StorageError
@@ -235,6 +237,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             secure=request.url.scheme == "https" or configured.app_env in {"staging", "production"},
         )
         return response
+
+    @app.get("/api/v1/topics")
+    @app.post("/api/v1/topics/refresh")
+    async def topics(request: Request, owner: str = Depends(authenticated),
+                     days: int = Query(default=14, ge=1, le=90)):
+        repo = request.app.state.repository
+        snapshot, acquired = await repo.topic_snapshot(owner, refresh=request.method == "POST")
+        if acquired:
+            async with httpx.AsyncClient(trust_env=False) as client:
+                snapshot = await collect_feeds(client, fixture=configured.topic_discovery == "fixture")
+            await repo.save_topic_snapshot(owner, snapshot)
+        if snapshot is None:
+            return {"candidates": [], "failures": [], "fixture": configured.topic_discovery == "fixture",
+                    "notice": "Refresh to load ideas. Refreshes are limited to once every five minutes."}
+        return rank_topics(snapshot, await repo.previous_briefs(owner), days=days)
 
     @app.post("/api/v1/runs", status_code=202)
     async def submit(brief: CreateRunRequest, request: Request, owner: str = Depends(authenticated),

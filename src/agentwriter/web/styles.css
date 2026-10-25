@@ -2782,3 +2782,13 @@ body[data-focus='true'] .draft-grid {
 
 .review-actions {display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 10px}
 .review-actions button {min-height:40px;font-size:12px}
+
+.topic-discovery {padding:22px;margin-bottom:24px}
+.topic-discovery>summary {cursor:pointer;font-weight:700}
+.topic-discovery p {margin-block:12px;font-size:13px;line-height:1.8}
+.topic-ideas {list-style:none;padding:0;max-height:520px;overflow:auto}
+.topic-ideas>li {border-top:1px solid var(--strong);padding:20px 0}
+.topic-ideas h3 {font-size:16px;line-height:1.5}
+.topic-ideas .actions {gap:18px}
+.brief-settings fieldset {border:0;padding:0}
+.brief-settings fieldset input {width:auto;min-height:0;margin-right:8px}

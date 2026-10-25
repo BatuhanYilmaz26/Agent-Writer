@@ -22,6 +22,14 @@ The header also has a light/dark theme toggle. It follows your system colour
 scheme until you choose a theme; the choice is remembered in this browser
 (`agentwriter.theme`).
 
+## Find a technical topic
+
+Expand **Find your next technical topic**, choose a recent window, and select **Refresh ideas**. In the default fixture profile you see a clearly labeled demonstration. Live discovery reads fixed Hugging Face, Google Research, Google DeepMind and arXiv machine-learning feeds when enabled in [configuration](configuration.md). No model or search-provider quota is used.
+
+Each idea links to its source and shows publisher, source type, publication and retrieval dates. Feed metadata is a lead, not verified evidence. Publisher claims, community posts and preprints need your judgment. Unknown publication dates stay explicit; updating an old page does not make it new. Unavailable feeds do not prevent entering your own topic. Refreshes reuse a saved snapshot for five minutes to avoid unnecessary requests.
+
+**Use this idea** adds the topic and source URLs to your brief and selects Required research. Add your angle before drafting. Repeated links/titles are merged; a warning identifies a source/topic used in your most recent 200 saved briefs. This is a drafting-history check, not a claim that an article has been published.
+
 ## Create a draft
 
 Choose **New draft** to open the writing studio. Start with your own topic or use

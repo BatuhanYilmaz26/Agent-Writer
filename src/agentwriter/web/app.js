@@ -1386,7 +1386,41 @@ async function deleteRun() {
   }
 }
 
+async function refreshTopics() {
+  const button = $("refresh-topics");
+  button.disabled = true;
+  $("topic-status").textContent = "Loading topic ideas…";
+  try {
+    const result = await api(`/api/v1/topics/refresh?days=${$("topic-window").value}`, { method: "POST" });
+    $("topic-ideas").replaceChildren();
+    $("topic-status").textContent = `${result.fixture ? "Synthetic demonstration. " : ""}${result.candidates.length} ${result.candidates.length === 1 ? "idea" : "ideas"}. ${result.notice} ${result.failures.length ? `${result.failures.length} feeds unavailable. ` : ""}Refreshes reuse the last result for five minutes.`;
+    for (const topic of result.candidates) {
+      const item = document.createElement("li");
+      const heading = document.createElement("h3");
+      heading.textContent = topic.title;
+      const meta = document.createElement("p");
+      meta.className = "help";
+      meta.textContent = `${topic.publisher} · ${topic.source_kind} · published ${topic.published_at || "unknown"} · retrieved ${topic.retrieved_at}. ${topic.reason} ${topic.warning}`;
+      const description = document.createElement("p"); description.textContent = topic.summary;
+      const link = document.createElement("a"); link.textContent = "Inspect source";
+      link.href = safeExternalUrl(topic.url); link.target = "_blank"; link.rel = "noopener noreferrer";
+      const use = document.createElement("button"); use.type = "button"; use.className = "secondary"; use.textContent = "Use this idea";
+      use.addEventListener("click", () => {
+        $("topic").value = topic.title;
+        $("reference_urls").value = topic.related_urls.slice(0, 4).join("\n");
+        $("research_mode").value = "required";
+        updateBriefDetails(); $("topic").focus();
+        announce("Topic and source URLs added to your brief. Choose your own angle before drafting.");
+      });
+      const actions = document.createElement("div"); actions.className = "actions"; actions.append(link, use);
+      item.append(heading, meta, description, actions); $("topic-ideas").append(item);
+    }
+  } catch (error) { $("topic-status").textContent = "Topic ideas could not be loaded. You can still enter your own topic."; showError(error); }
+  finally { button.disabled = false; }
+}
+
 function wireEvents() {
+  $("refresh-topics").addEventListener("click", refreshTopics);
   $("new-draft").addEventListener("click", () => openComposer(true));
   $("library-new").addEventListener("click", () => openComposer(true));
   $("back-to-brief").addEventListener("click", () => openComposer(false));

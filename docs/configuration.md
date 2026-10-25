@@ -98,3 +98,7 @@ Accepted examples without research: “How forests grow” and “Write a short 
 Startup errors identify the setting or incompatible policy without displaying credential values. `Settings.sanitized_summary()` returns an allowlisted diagnostic summary; do not dump process environments or raw connection URLs into logs. If configuration fails, correct the named setting rather than disabling persistence, qualification or restricted deserialization.
 
 The implementation follows the [official Pydantic models](https://docs.pydantic.dev/latest/concepts/models/), [validators](https://docs.pydantic.dev/latest/concepts/validators/) and [settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) interfaces. Keep your executed checks with your local operating records; configuration examples alone do not verify infrastructure or providers.
+
+## Topic discovery
+
+`TOPIC_DISCOVERY=fixture` is the default and uses no network. For on-demand publisher-feed ideas, set `TOPIC_DISCOVERY=public_feeds` and `ENABLE_EXTERNAL_CALLS=true`, then restart the API. This requires no API key or hosting change. Model and research-provider settings remain independent. The four fixed HTTPS feeds use bounded responses, a ten-second per-feed timeout, no redirects or automatic retries, and a persisted five-minute refresh cooldown. No refresh runs on a schedule.

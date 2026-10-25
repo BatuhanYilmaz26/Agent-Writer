@@ -312,7 +312,9 @@ async def test_revision_review_migration_preserves_existing_articles_and_run_sta
                     "VALUES (%s,%s,%s,%s,'unassessed','human')", (revision_id, run_id, BODY, digest),
                 )
                 await connection.execute("UPDATE runs SET current_revision=%s WHERE id=%s", (revision_id, run_id))
-        assert await migrate(dsn, migrations, setup_saver=False) == ["0004_revision_reviews.sql"]
+        expected = [path.name for path in sorted(migrations.glob("*.sql")) if path.name >= "0004"]
+        assert expected[0] == "0004_revision_reviews.sql"
+        assert await migrate(dsn, migrations, setup_saver=False) == expected
         assert await migrate(dsn, migrations, setup_saver=False) == []
         async with database_pool(dsn, migrations_directory=migrations) as pool:
             repository = Repository(pool, dsn)

@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     model_provider: Literal["fixture", "openrouter"] = "fixture"
     research_provider: Literal["fixture", "treg", "tavily"] = "fixture"
     enable_external_calls: bool = False
+    topic_discovery: Literal["fixture", "public_feeds"] = "fixture"
     openrouter_qualified: bool = False
     treg_qualified: bool = False
     tavily_qualified: bool = False
@@ -163,6 +164,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def valid_profile(self) -> Settings:
+        if self.topic_discovery == "public_feeds" and not self.enable_external_calls:
+            raise ValueError("Public topic feeds require ENABLE_EXTERNAL_CALLS=true")
         hosted = self.app_env in {"staging", "production"}
         if self.job_heartbeat_seconds * 2 >= self.job_lease_seconds:
             raise ValueError("JOB_HEARTBEAT_SECONDS must be less than half JOB_LEASE_SECONDS")
