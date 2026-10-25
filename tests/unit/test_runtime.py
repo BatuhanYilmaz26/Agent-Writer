@@ -2,7 +2,7 @@
 
 import asyncio
 
-from agentwriter.runtime import loop_factory
+from fieldnote.runtime import loop_factory
 
 
 def test_loop_factory_returns_a_closable_selector_loop() -> None:

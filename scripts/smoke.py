@@ -18,7 +18,7 @@ TOPIC = "A practical guide to building a writing habit"
 
 
 def main() -> None:
-    with tempfile.TemporaryDirectory(prefix="agentwriter-smoke-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="fieldnote-smoke-") as temporary:
         output = Path(temporary) / "demo.md"
         environment = os.environ.copy()
         environment["PYTHONPATH"] = str(ROOT / "src")
@@ -28,7 +28,7 @@ def main() -> None:
             [
                 sys.executable,
                 "-m",
-                "agentwriter",
+                "fieldnote",
                 "demo",
                 "--topic",
                 TOPIC,

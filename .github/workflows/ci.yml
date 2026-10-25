@@ -20,19 +20,19 @@ jobs:
       postgres:
         image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
         env:
-          POSTGRES_USER: agentwriter
-          POSTGRES_PASSWORD: agentwriter_ci_only
-          POSTGRES_DB: agentwriter_test
+          POSTGRES_USER: fieldnote
+          POSTGRES_PASSWORD: fieldnote_ci_only
+          POSTGRES_DB: fieldnote_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U agentwriter -d agentwriter_test"
+          --health-cmd "pg_isready -U fieldnote -d fieldnote_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
     env:
       PYTHONPATH: src
-      TEST_DATABASE_URL: postgresql://agentwriter:agentwriter_ci_only@127.0.0.1:5432/agentwriter_test
+      TEST_DATABASE_URL: postgresql://fieldnote:fieldnote_ci_only@127.0.0.1:5432/fieldnote_test
       TEMP: /tmp
     steps:
       - name: Check out repository

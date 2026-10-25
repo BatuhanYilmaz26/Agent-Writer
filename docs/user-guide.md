@@ -1,4 +1,4 @@
-# AgentWriter user guide
+# Fieldnote user guide
 
 This guide describes the browser workspace in the local development profile. The
 default profile uses synthetic model and research fixtures. It is a complete
@@ -20,7 +20,7 @@ one.
 
 The header also has a light/dark theme toggle. It follows your system colour
 scheme until you choose a theme; the choice is remembered in this browser
-(`agentwriter.theme`).
+(`fieldnote.theme`).
 
 ## Find a technical topic
 
@@ -285,7 +285,7 @@ Open **Prepare to publish** below a saved article. **Save publication package** 
 
 Choose a single X post or a 3–5-post thread. **Replace drafts with article extracts** regenerates these local extracts and clears the publishing checklist. It can produce fewer posts if the article has too few suitable short sentences; the workspace reports that limitation. You can edit the result, separating posts with a line containing `---`. Each post is validated against the [standard weighted 280-character rules](https://docs.x.com/fundamentals/counting-characters), including numbering, URL shortening and the versioned parser's emoji/Unicode data. New emoji sequences or TLD changes can require a parser update; double-check the platform composer near its limit.
 
-Add a canonical article URL if this is a cross-post; otherwise a source link is used for the initial social extracts. Edit the AI-assistance disclosure so it accurately describes your work. A disclosure in the chosen article language is supplied by default. [Medium's policy](https://help.medium.com/hc/en-us/articles/22576852947223-Artificial-Intelligence-AI-content-policy) requires disclosure for generated text and restricts AI-generated writing from its Partner Program paywall. It also requires captions identifying any AI images you add yourself. Grammar, outlining and fact-checking assistance are treated differently in its FAQ. AgentWriter cannot promise distribution or monetization eligibility.
+Add a canonical article URL if this is a cross-post; otherwise a source link is used for the initial social extracts. Edit the AI-assistance disclosure so it accurately describes your work. A disclosure in the chosen article language is supplied by default. [Medium's policy](https://help.medium.com/hc/en-us/articles/22576852947223-Artificial-Intelligence-AI-content-policy) requires disclosure for generated text and restricts AI-generated writing from its Partner Program paywall. It also requires captions identifying any AI images you add yourself. Grammar, outlining and fact-checking assistance are treated differently in its FAQ. Fieldnote cannot promise distribution or monetization eligibility.
 
 Use the checklist to record your own source, voice, language, social-context and disclosure review. These are your attestations, not an independent certification. An unassessed or synthetic article remains **Review required** even if every checkbox is selected. Technical review also flags missing selected sources, unsupported freshness wording, unlabeled code examples and certain first-person experiment claims absent from your observations. These conservative signals supplement your reading; they do not prove that all remaining claims are true. Retrieved code is never executed automatically.
 

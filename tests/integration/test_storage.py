@@ -18,9 +18,9 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 from psycopg_pool import PoolTimeout
 
-from agentwriter.storage import Repository, StorageError
-from agentwriter.storage.migrate import grant_runtime, migrate, migration_files
-from agentwriter.storage.pool import database_pool
+from fieldnote.storage import Repository, StorageError
+from fieldnote.storage.migrate import grant_runtime, migrate, migration_files
+from fieldnote.storage.pool import database_pool
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 

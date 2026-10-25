@@ -5,7 +5,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from agentwriter.settings import Settings
+from fieldnote.settings import Settings
 
 
 def test_local_fixture_defaults_are_loopback_and_no_external_calls() -> None:
@@ -52,7 +52,7 @@ def test_canonical_env_names_and_no_legacy_key_alias(monkeypatch: pytest.MonkeyP
 
 def test_secret_values_never_enter_repr_json_or_summary() -> None:
     secret = "do-not-log-very-private-credential"
-    settings = Settings(_env_file=None, openrouter_api_key=secret, database_url="postgresql://owner:secret@localhost/agentwriter")
+    settings = Settings(_env_file=None, openrouter_api_key=secret, database_url="postgresql://owner:secret@localhost/fieldnote")
     assert secret not in repr(settings)
     assert secret not in settings.model_dump_json()
     summary = json.dumps(settings.sanitized_summary())

@@ -3,8 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from agentwriter.domain import CreateRunRequest
-from agentwriter.services.policy import determine_research
+from fieldnote.domain import CreateRunRequest
+from fieldnote.services.policy import determine_research
 
 
 def test_explicit_required_cannot_be_downgraded_by_creative_brief() -> None:

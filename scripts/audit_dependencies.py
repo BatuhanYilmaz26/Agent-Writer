@@ -20,7 +20,7 @@ def fetch(url: str, payload: dict | None = None) -> dict:
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(
         url, data=data,
-        headers={"User-Agent": "AgentWriter-dependency-review/0.1", "Content-Type": "application/json"},
+        headers={"User-Agent": "Fieldnote-dependency-review/0.1", "Content-Type": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=40) as response:
         return json.load(response)

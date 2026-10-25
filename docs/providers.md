@@ -1,6 +1,6 @@
 # Model and research providers
 
-AgentWriter keeps provider selection in server configuration. Your browser never
+Fieldnote keeps provider selection in server configuration. Your browser never
 receives an API key or selects a provider URL. Fixture mode uses deterministic
 synthetic content and makes no model or research network requests.
 
@@ -45,7 +45,7 @@ not zero. Local cancellation does not prove remote processing or billing stopped
 
 ### When an AI response is rejected
 
-An HTTP success does not guarantee an acceptable article. AgentWriter checks
+An HTTP success does not guarantee an acceptable article. Fieldnote checks
 the response envelope, JSON fields and application rules, including section
 budgets that must add up to the requested total. Invalid content is rejected.
 
@@ -68,7 +68,7 @@ Keep your key in an ignored file or `OPENROUTER_API_KEY`; never pass it on the
 command line. After setting `PYTHONPATH` to the project's `src` directory, run:
 
 ```powershell
-.\.venv\Scripts\python.exe -m agentwriter.providers.qualification --env-file .env --output .local\openrouter\qualification.json
+.\.venv\Scripts\python.exe -m fieldnote.providers.qualification --env-file .env --output .local\openrouter\qualification.json
 ```
 
 The check reads only `OPENROUTER_API_KEY` from the selected file, captures an
@@ -127,7 +127,7 @@ Official references:
 
 ## Source links and citations
 
-Generated drafts use `[@source_id]` markers. AgentWriter resolves them from its
+Generated drafts use `[@source_id]` markers. Fieldnote resolves them from its
 source ledger; models cannot invent clickable citation URLs. Deterministic
 checks reject unknown/malformed markers, unextracted sources, authored links,
 images and raw HTML. These checks establish reference identity, not whether the

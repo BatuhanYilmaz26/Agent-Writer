@@ -5,13 +5,13 @@ import unicodedata
 import pytest
 from pydantic import ValidationError
 
-from agentwriter.domain import CreateRunRequest
-from agentwriter.domain.languages import LANGUAGES, language_profile
-from agentwriter.graph import build_graph, initial_state, make_fixture_dependencies
-from agentwriter.services.claims import assess_claim
-from agentwriter.services.policy import determine_research
-from agentwriter.services.research import pack_evidence
-from agentwriter.worker.runner import _prepare_artifact
+from fieldnote.domain import CreateRunRequest
+from fieldnote.domain.languages import LANGUAGES, language_profile
+from fieldnote.graph import build_graph, initial_state, make_fixture_dependencies
+from fieldnote.services.claims import assess_claim
+from fieldnote.services.policy import determine_research
+from fieldnote.services.research import pack_evidence
+from fieldnote.worker.runner import _prepare_artifact
 
 
 @pytest.mark.parametrize("language", LANGUAGES)

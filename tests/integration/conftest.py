@@ -15,9 +15,9 @@ import pytest
 import pytest_asyncio
 from psycopg import sql
 
-from agentwriter.main import create_app
-from agentwriter.settings import Settings
-from agentwriter.storage.migrate import migrate
+from fieldnote.main import create_app
+from fieldnote.settings import Settings
+from fieldnote.storage.migrate import migrate
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 TEST_DSN = os.environ.get("TEST_DATABASE_URL")

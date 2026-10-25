@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Fieldnote retention daily
+Documentation=https://github.com/BatuhanYilmaz26/Fieldnote/blob/main/docs/setup-and-operations.md
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=fieldnote-retention.service
+
+[Install]
+WantedBy=timers.target

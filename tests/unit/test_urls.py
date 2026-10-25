@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agentwriter.services.urls import (
+from fieldnote.services.urls import (
     UnsafeURL,
     canonicalize_url,
     resolve_public_url,

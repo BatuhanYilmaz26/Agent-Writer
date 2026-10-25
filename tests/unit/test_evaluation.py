@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agentwriter.evaluation import (
+from fieldnote.evaluation import (
     DEFAULT_CORPUS,
     CorpusError,
     compare_baseline,

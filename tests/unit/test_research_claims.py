@@ -6,13 +6,13 @@ import hashlib
 
 import pytest
 
-from agentwriter.providers.base import ProviderError
-from agentwriter.services.claims import (
+from fieldnote.providers.base import ProviderError
+from fieldnote.services.claims import (
     assess_claim,
     extract_claim_assessments,
     unsupported_claim_issues,
 )
-from agentwriter.services.research import (
+from fieldnote.services.research import (
     ResearchCoordinator,
     ResearchLimits,
     flag_conflicts,

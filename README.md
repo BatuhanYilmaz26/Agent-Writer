@@ -1,4 +1,4 @@
-# AgentWriter
+# Fieldnote
 
 A source-aware technical writing studio built with **LangGraph, FastAPI and PostgreSQL**.
 
@@ -7,9 +7,9 @@ for writing about AI, data science and machine learning. It turns a research bri
 into an editable article, keeps evidence alongside the text, and prepares posts
 for Medium, LinkedIn and X. The author controls the final wording and publication.
 
-[User guide](docs/user-guide.md) · [Setup](docs/setup-and-operations.md) · [Workflow](docs/workflow.md) · [CI](https://github.com/BatuhanYilmaz26/Agent-Writer/actions/workflows/ci.yml)
+[User guide](docs/user-guide.md) · [Setup](docs/setup-and-operations.md) · [Workflow](docs/workflow.md) · [CI](https://github.com/BatuhanYilmaz26/Fieldnote/actions/workflows/ci.yml)
 
-![Technical article preview with a Pydantic code example, editorial review and revision history](assets/technical-writing-studio.jpg)
+![Fieldnote technical article preview with a Pydantic code example, editorial review and revision history](assets/fieldnote-writing-studio.jpg)
 
 *Technical article sample edited in the local fixture profile; source and review data are synthetic.*
 
@@ -80,12 +80,12 @@ sources before publishing. Posting to external platforms is manual.
 | [User guide](docs/user-guide.md) | Drafting, editing, titles, evidence and publication bundles |
 | [Setup and operations](docs/setup-and-operations.md) | Local services, verification and maintenance |
 | [Configuration](docs/configuration.md) · [Providers](docs/providers.md) · [Budgets](docs/budgets.md) | Provider settings, limits and cost controls |
-| `src/agentwriter/` | Domain models, workflow, providers, API, persistence, worker and browser workspace |
+| `src/fieldnote/` | Domain models, workflow, providers, API, persistence, worker and browser workspace |
 | `migrations/` | PostgreSQL schema migrations |
 | `tests/` · `evaluation/` | Automated checks, versioned corpus and editorial rubric |
 | `scripts/` · `ops/` | Verification tools, monitoring and maintenance definitions |
 | `assets/` | Workspace screenshots |
 
 Built by [@BatuhanYilmaz26](https://github.com/BatuhanYilmaz26).
-For bugs and suggestions, [open an issue](https://github.com/BatuhanYilmaz26/Agent-Writer/issues)
+For bugs and suggestions, [open an issue](https://github.com/BatuhanYilmaz26/Fieldnote/issues)
 with reproduction steps and no credentials or private draft content.

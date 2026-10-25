@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
-from agentwriter.domain import CreateRunRequest
-from agentwriter.services.technical import source_metadata, technical_issues
+from fieldnote.domain import CreateRunRequest
+from fieldnote.services.technical import source_metadata, technical_issues
 
 
 def codes(raw, **changes):

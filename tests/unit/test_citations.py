@@ -1,6 +1,6 @@
 import pytest
 
-from agentwriter.services.citations import CitationError, render_citations, validate_citations
+from fieldnote.services.citations import CitationError, render_citations, validate_citations
 
 
 def ledger():

@@ -8,9 +8,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN groupadd --gid 10001 agentwriter \
+RUN groupadd --gid 10001 fieldnote \
     && useradd --uid 10001 --gid 10001 --no-create-home \
-       --shell /usr/sbin/nologin agentwriter
+       --shell /usr/sbin/nologin fieldnote
 
 COPY requirements.lock ./
 RUN python -m pip install --require-hashes --only-binary :all: -r requirements.lock
@@ -20,4 +20,4 @@ COPY --chown=10001:10001 migrations ./migrations
 
 USER 10001:10001
 EXPOSE 8000
-CMD ["python", "-m", "agentwriter", "serve"]
+CMD ["python", "-m", "fieldnote", "serve"]

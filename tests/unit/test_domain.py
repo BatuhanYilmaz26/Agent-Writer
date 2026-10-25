@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from agentwriter.domain import (
+from fieldnote.domain import (
     ArticleRevision,
     ClaimCitation,
     ContentPlan,
@@ -27,7 +27,7 @@ def task(task_id: str, order: int, words: int = 250) -> SectionTask:
 
 
 def test_technical_brief_keeps_legacy_hashes_and_validates_new_context() -> None:
-    from agentwriter.storage.repository import canonical_hash
+    from fieldnote.storage.repository import canonical_hash
 
     legacy = {"topic": "A forest", "audience": "General readers", "tone": "clear",
               "language": "en", "target_words": 1200, "research_mode": "required", "instructions": ""}

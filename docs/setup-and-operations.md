@@ -1,6 +1,6 @@
 # Setup and operations
 
-This guide covers a local, production-shaped installation of AgentWriter. The
+This guide covers a local, production-shaped installation of Fieldnote. The
 default profile uses fixture model and research providers: it makes no live AI
 or web request and needs no provider credentials. It is a complete workflow
 demonstration, not a production release.
@@ -33,7 +33,7 @@ From the repository root:
 uv venv .venv --python python
 uv pip sync --python .venv\Scripts\python.exe --require-hashes --only-binary :all: --index-url https://pypi.org/simple requirements-dev.lock
 $env:PYTHONPATH = (Join-Path (Get-Location) 'src')
-.\.venv\Scripts\python.exe -m agentwriter --help
+.\.venv\Scripts\python.exe -m fieldnote --help
 ```
 
 `uv venv` does not install `pip`; use `uv pip` for this environment. If you
@@ -46,7 +46,7 @@ available, but the hashed lock and `--only-binary :all:` review still apply.
 uv venv .venv --python python3.13
 uv pip sync --python .venv/bin/python --require-hashes --only-binary :all: --index-url https://pypi.org/simple requirements-dev.lock
 export PYTHONPATH="$PWD/src"
-.venv/bin/python -m agentwriter --help
+.venv/bin/python -m fieldnote --help
 ```
 
 For a runtime-only installation, sync `requirements.lock` instead of
@@ -70,11 +70,11 @@ with the global `--env-file` option, or export the variables in the process
 that starts the API and worker:
 
 ```powershell
-.\.venv\Scripts\python.exe -m agentwriter --env-file .env settings
+.\.venv\Scripts\python.exe -m fieldnote --env-file .env settings
 ```
 
 ```bash
-.venv/bin/python -m agentwriter --env-file .env settings
+.venv/bin/python -m fieldnote --env-file .env settings
 ```
 
 `settings` prints a sanitized summary. It never prints credentials or the
@@ -100,7 +100,7 @@ fails closed.
 
 ## Create PostgreSQL
 
-AgentWriter has no SQLite or in-memory fallback. The API and worker require a
+Fieldnote has no SQLite or in-memory fallback. The API and worker require a
 real PostgreSQL database with the application migrations applied.
 
 ### Option A: an existing PostgreSQL 18 server
@@ -109,9 +109,9 @@ Ask the database administrator to create two roles and a database. The
 migration role owns the schema; the runtime role is restricted:
 
 ```sql
-CREATE ROLE agentwriter_migrate LOGIN PASSWORD 'replace-me';
-CREATE ROLE agentwriter_runtime LOGIN PASSWORD 'replace-me';
-CREATE DATABASE agentwriter OWNER agentwriter_migrate;
+CREATE ROLE fieldnote_migrate LOGIN PASSWORD 'replace-me';
+CREATE ROLE fieldnote_runtime LOGIN PASSWORD 'replace-me';
+CREATE DATABASE fieldnote OWNER fieldnote_migrate;
 ```
 
 Use URL-encoded credentials in the DSNs. Keep both passwords in an ignored
@@ -120,16 +120,16 @@ Use URL-encoded credentials in the DSNs. Keep both passwords in an ignored
 ### Option B: a disposable local container
 
 ```powershell
-docker run --name agentwriter-postgres --rm -d `
+docker run --name fieldnote-postgres --rm -d `
   -e POSTGRES_PASSWORD=local-only-password `
-  -e POSTGRES_DB=agentwriter `
+  -e POSTGRES_DB=fieldnote `
   -p 127.0.0.1:5432:5432 postgres:18
 ```
 
 ```bash
-docker run --name agentwriter-postgres --rm -d \
+docker run --name fieldnote-postgres --rm -d \
   -e POSTGRES_PASSWORD=local-only-password \
-  -e POSTGRES_DB=agentwriter \
+  -e POSTGRES_DB=fieldnote \
   -p 127.0.0.1:5432:5432 postgres:18
 ```
 
@@ -142,15 +142,15 @@ Set the migration and runtime DSNs, then run the migration command once per
 deployment. The API and worker do not run DDL at startup.
 
 ```powershell
-$env:MIGRATION_DATABASE_URL = 'postgresql://agentwriter_migrate:replace-me@127.0.0.1:5432/agentwriter'
-$env:DATABASE_URL = 'postgresql://agentwriter_runtime:replace-me@127.0.0.1:5432/agentwriter'
-.\.venv\Scripts\python.exe -m agentwriter.storage.migrate --directory migrations --runtime-role agentwriter_runtime
+$env:MIGRATION_DATABASE_URL = 'postgresql://fieldnote_migrate:replace-me@127.0.0.1:5432/fieldnote'
+$env:DATABASE_URL = 'postgresql://fieldnote_runtime:replace-me@127.0.0.1:5432/fieldnote'
+.\.venv\Scripts\python.exe -m fieldnote.storage.migrate --directory migrations --runtime-role fieldnote_runtime
 ```
 
 ```bash
-export MIGRATION_DATABASE_URL='postgresql://agentwriter_migrate:replace-me@127.0.0.1:5432/agentwriter'
-export DATABASE_URL='postgresql://agentwriter_runtime:replace-me@127.0.0.1:5432/agentwriter'
-.venv/bin/python -m agentwriter.storage.migrate --directory migrations --runtime-role agentwriter_runtime
+export MIGRATION_DATABASE_URL='postgresql://fieldnote_migrate:replace-me@127.0.0.1:5432/fieldnote'
+export DATABASE_URL='postgresql://fieldnote_runtime:replace-me@127.0.0.1:5432/fieldnote'
+.venv/bin/python -m fieldnote.storage.migrate --directory migrations --runtime-role fieldnote_runtime
 ```
 
 The command takes an advisory lock, verifies applied migration checksums,
@@ -173,21 +173,21 @@ the only process that executes runs and calls providers.
 ```powershell
 # Terminal 1
 $env:PYTHONPATH = (Join-Path (Get-Location) 'src')
-.\.venv\Scripts\python.exe -m agentwriter --env-file .env serve
+.\.venv\Scripts\python.exe -m fieldnote --env-file .env serve
 
 # Terminal 2
 $env:PYTHONPATH = (Join-Path (Get-Location) 'src')
-.\.venv\Scripts\python.exe -m agentwriter --env-file .env worker
+.\.venv\Scripts\python.exe -m fieldnote --env-file .env worker
 ```
 
 ```bash
 # Terminal 1
 export PYTHONPATH="$PWD/src"
-.venv/bin/python -m agentwriter --env-file .env serve
+.venv/bin/python -m fieldnote --env-file .env serve
 
 # Terminal 2
 export PYTHONPATH="$PWD/src"
-.venv/bin/python -m agentwriter --env-file .env worker
+.venv/bin/python -m fieldnote --env-file .env worker
 ```
 
 Open `http://127.0.0.1:8000`. `Ctrl+C` stops each process. A run survives a
@@ -228,7 +228,7 @@ disposable PostgreSQL database whose role can create and drop schemas; it
 creates a unique schema per test and removes it.
 
 ```powershell
-$env:TEST_DATABASE_URL = 'postgresql://agentwriter_test:replace-me@127.0.0.1:5432/agentwriter_test'
+$env:TEST_DATABASE_URL = 'postgresql://fieldnote_test:replace-me@127.0.0.1:5432/fieldnote_test'
 $env:PYTHONPATH = (Join-Path (Get-Location) 'src')
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check src tests scripts
@@ -236,7 +236,7 @@ $env:PYTHONPATH = (Join-Path (Get-Location) 'src')
 ```
 
 ```bash
-export TEST_DATABASE_URL='postgresql://agentwriter_test:replace-me@127.0.0.1:5432/agentwriter_test'
+export TEST_DATABASE_URL='postgresql://fieldnote_test:replace-me@127.0.0.1:5432/fieldnote_test'
 export PYTHONPATH="$PWD/src"
 .venv/bin/python -m pytest -q
 .venv/bin/python -m ruff check src tests scripts
@@ -372,13 +372,13 @@ environment, then:
 
 ```powershell
 New-Item -ItemType Directory -Force backups | Out-Null
-$backupName = 'agentwriter-' + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') + '.dump.enc'
-docker exec -e BACKUP_PASSPHRASE agentwriter-db-1 bash -o pipefail -ec 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out /tmp/agentwriter.dump.enc'
+$backupName = 'fieldnote-' + (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ') + '.dump.enc'
+docker exec -e BACKUP_PASSPHRASE fieldnote-db-1 bash -o pipefail -ec 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE -out /tmp/fieldnote.dump.enc'
 if ($LASTEXITCODE -ne 0) { throw 'Backup failed; do not use the partial output.' }
-docker cp agentwriter-db-1:/tmp/agentwriter.dump.enc (Join-Path backups $backupName)
+docker cp fieldnote-db-1:/tmp/fieldnote.dump.enc (Join-Path backups $backupName)
 if ($LASTEXITCODE -ne 0) { throw 'Backup copy failed; retain the container copy.' }
 Get-FileHash (Join-Path backups $backupName) -Algorithm SHA256
-docker exec agentwriter-db-1 rm -f -- /tmp/agentwriter.dump.enc
+docker exec fieldnote-db-1 rm -f -- /tmp/fieldnote.dump.enc
 ```
 
 From a Linux shell with the corresponding process variables set:
@@ -386,27 +386,27 @@ From a Linux shell with the corresponding process variables set:
 ```bash
 mkdir -p backups
 docker exec -e PGPASSWORD="$POSTGRES_PASSWORD" -e BACKUP_PASSPHRASE="$BACKUP_PASSPHRASE" \
-  agentwriter-db-1 bash -o pipefail -ec \
-  'pg_dump -U agentwriter -d agentwriter --format=custom \
+  fieldnote-db-1 bash -o pipefail -ec \
+  'pg_dump -U fieldnote -d fieldnote --format=custom \
    | openssl enc -aes-256-cbc -pbkdf2 -salt \
-       -pass env:BACKUP_PASSPHRASE -out /tmp/agentwriter.dump.enc'
-docker cp agentwriter-db-1:/tmp/agentwriter.dump.enc \
-  ./backups/agentwriter-$(date +%Y%m%dT%H%M%SZ).dump.enc
-docker exec agentwriter-db-1 rm -f /tmp/agentwriter.dump.enc
+       -pass env:BACKUP_PASSPHRASE -out /tmp/fieldnote.dump.enc'
+docker cp fieldnote-db-1:/tmp/fieldnote.dump.enc \
+  ./backups/fieldnote-$(date +%Y%m%dT%H%M%SZ).dump.enc
+docker exec fieldnote-db-1 rm -f /tmp/fieldnote.dump.enc
 ```
 
 Store the encrypted file and its checksum off-host. Never commit a dump,
 passphrase or host path. Restore into a separate database first:
 
 ```bash
-docker exec agentwriter-db-1 psql -U agentwriter -d postgres \
-  -c "CREATE DATABASE agentwriter_restore"
-docker cp backups/agentwriter-20261024T000000Z.dump.enc \
-  agentwriter-db-1:/tmp/restore.dump.enc
-docker exec -e BACKUP_PASSPHRASE="$BACKUP_PASSPHRASE" agentwriter-db-1 bash -o pipefail -ec \
+docker exec fieldnote-db-1 psql -U fieldnote -d postgres \
+  -c "CREATE DATABASE fieldnote_restore"
+docker cp backups/fieldnote-20261024T000000Z.dump.enc \
+  fieldnote-db-1:/tmp/restore.dump.enc
+docker exec -e BACKUP_PASSPHRASE="$BACKUP_PASSPHRASE" fieldnote-db-1 bash -o pipefail -ec \
   'openssl enc -d -aes-256-cbc -pbkdf2 -pass env:BACKUP_PASSPHRASE \
      -in /tmp/restore.dump.enc \
-   | pg_restore -U agentwriter -d agentwriter_restore \
+   | pg_restore -U fieldnote -d fieldnote_restore \
        --no-owner --no-privileges --exit-on-error'
 ```
 
@@ -435,12 +435,12 @@ after `DELETED_RUN_GRACE_HOURS` (24 by default). Retention is not a backup.
 ## Change settings safely
 
 1. Edit the ignored `.env` or the service environment.
-2. Run `python -m agentwriter --env-file .env settings` and confirm the
+2. Run `python -m fieldnote --env-file .env settings` and confirm the
    sanitized summary.
 3. Restart the API and worker so both use the same values.
 4. Verify `/ready` and one fixture run.
 5. For retention changes, stop the retention timer first, apply the new
-   environment, run `python -m agentwriter retention --batch-size 100` once
+   environment, run `python -m fieldnote retention --batch-size 100` once
    manually, confirm the JSON counters and the active queue, then re-enable the
    timer.
 
@@ -452,11 +452,11 @@ identify an invalid setting without printing its value.
 | Symptom | Likely cause | Action |
 |---|---|---|
 | `Set DATABASE_URL ...` | No runtime DSN in the process | Set `DATABASE_URL` or pass `--env-file .env`. |
-| `No module named agentwriter` | `PYTHONPATH` is unset | Set `PYTHONPATH` to the repository `src` directory. |
+| `No module named fieldnote` | `PYTHONPATH` is unset | Set `PYTHONPATH` to the repository `src` directory. |
 | `No module named pip` | The venv was created by `uv` | Use `uv pip sync ...`, not `python -m pip`. |
 | Migration checksum or order error | An applied migration was edited or is missing | Restore the matching backup or add a new forward migration; do not rewrite history. |
 | `/ready` returns `503` | Database unavailable, migrations missing or no fresh worker | Check the DSN, run migrations, start the worker and read its logs. |
-| Worker starts but runs stay queued | API and worker use different databases or the worker is stale | Compare `DATABASE_URL`, check `/metrics` for `agentwriter_workers`, and read worker logs. |
+| Worker starts but runs stay queued | API and worker use different databases or the worker is stale | Compare `DATABASE_URL`, check `/metrics` for `fieldnote_workers`, and read worker logs. |
 | `POSTGRES_PASSWORD is missing` | Compose variable is not set | Set it in `.env` or the shell before `docker compose`. |
 | Port `8000` is already in use | Another API or Compose stack is running | Stop the other process or change `PORT`/the Compose mapping. |
 | Database tests are skipped | `TEST_DATABASE_URL` is unset | Set it to a disposable database whose role can create schemas. |
@@ -472,3 +472,21 @@ Treg behavior, hosted OIDC identity, human factual review, deployed load or
 fault behavior, or release acceptance. The manual screen-reader sample for the
 browser is still a pre-public-release item. See the root
 [README](../README.md#local-use-and-providers) for the project overview and local-use guidance.
+
+
+### Upgrading an existing workspace to Fieldnote
+
+The Python entry point is now `python -m fieldnote`. Update any saved commands,
+service definitions and monitoring queries to the names in this repository.
+The emitted metric prefix is `fieldnote_`; the bundled alert rules match it.
+
+Keep your existing database URL, role, database name and Compose project name
+when upgrading an installation with saved drafts. Renaming those storage
+identifiers is a separate data migration. A local `compose.override.yaml` can
+retain the existing project `name`; this file is ignored by Git and excluded
+from image builds. Preserve your existing `POSTGRES_USER` and `POSTGRES_DB`
+values in the ignored environment file. Fresh installations use Fieldnote defaults.
+
+Browser theme and last-opened-draft preferences migrate on first load. Saved
+article bytes, source records and existing publication packages retain their
+original provenance. New drafts and exports use Fieldnote branding.

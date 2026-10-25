@@ -7,17 +7,17 @@ import zipfile
 import pytest
 from pydantic import ValidationError
 
-from agentwriter.domain import ContentPlan, CreateRunRequest, markdown_hash
-from agentwriter.domain.publishing import PublicationRequest
-from agentwriter.graph import build_graph, initial_state, make_fixture_dependencies
-from agentwriter.services.discovery import article_discovery
-from agentwriter.services.publishing import (
+from fieldnote.domain import ContentPlan, CreateRunRequest, markdown_hash
+from fieldnote.domain.publishing import PublicationRequest
+from fieldnote.graph import build_graph, initial_state, make_fixture_dependencies
+from fieldnote.services.discovery import article_discovery
+from fieldnote.services.publishing import (
     article_html,
     build_publication,
     plain_markdown,
     publication_zip,
 )
-from agentwriter.worker.runner import _prepare_artifact
+from fieldnote.worker.runner import _prepare_artifact
 
 
 def test_readability_notes_count_prose_without_penalizing_literal_code_or_quotes():

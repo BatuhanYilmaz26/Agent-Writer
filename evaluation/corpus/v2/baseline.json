@@ -1,8 +1,8 @@
 {
   "corpus_version": "2.0.0",
-  "evaluator_version": "2.0.0",
+  "evaluator_version": "2.0.1",
   "graph_version": "v1",
-  "result_hash": "21bb9e5aba1732f657c54664ccfda0f76c45db5c10874359c1bf83e258e05ef5",
+  "result_hash": "64eec29008f596c474cc8a10fcb620f66403a681f1530087a9077673f544de61",
   "summary": {
     "total_entries": 50,
     "valid_cases": 44,

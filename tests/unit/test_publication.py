@@ -12,18 +12,19 @@ spec.loader.exec_module(publication)
 
 
 @pytest.mark.parametrize("path", [
-    "IMPLEMENTATION_TRACKER.md", "PLANNING_REVIEW.md", "agentwriter-production-guide-v3.md",
+    "IMPLEMENTATION_TRACKER.md", "PLANNING_REVIEW.md", "fieldnote-production-guide-v3.md",
     "docs/evidence/report.json", "docs/archive/original.md", "docs/runbooks/alerts.md",
     "nested/PRIVATE.MD", "internal/report.json", ".local/before.bundle", ".secrets/treg.token",
     "opencode.json", "nested/.env.production", "nested/production.env", "credentials.json",
     "backups/snapshot.dump.enc", "nested/snapshot.dump.enc", ".aws/credentials",
+    "compose.override.yaml", "compose.override.yml",
 ])
 def test_private_paths_are_rejected_even_if_force_staged(path):
     assert publication.private_path(path)
 
 
 @pytest.mark.parametrize("path", [
-    "README.md", "docs/user-guide.md", "docs/providers.md", "src/agentwriter/main.py",
+    "README.md", "docs/user-guide.md", "docs/providers.md", "src/fieldnote/main.py",
     "tests/unit/test_settings.py", ".env.example", "requirements.lock",
     "evaluation/corpus/v1/rubric.md", "evaluation/corpus/v2/rubric.md", "migrations/0001_initial.sql",
 ])

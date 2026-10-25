@@ -9,9 +9,9 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import ValidationError
 
-from agentwriter.domain import CreateRunRequest, SectionDraft
-from agentwriter.domain.languages import LANGUAGES
-from agentwriter.graph import (
+from fieldnote.domain import CreateRunRequest, SectionDraft
+from fieldnote.domain.languages import LANGUAGES
+from fieldnote.graph import (
     GraphDependencies,
     GraphError,
     GraphHooks,
@@ -20,8 +20,8 @@ from agentwriter.graph import (
     make_fixture_dependencies,
     merge_sections,
 )
-from agentwriter.providers.base import ModelResult, ModelT
-from agentwriter.providers.fixture import FixtureGateway, FixtureResearchGateway
+from fieldnote.providers.base import ModelResult, ModelT
+from fieldnote.providers.fixture import FixtureGateway, FixtureResearchGateway
 
 
 class RecordingGateway(FixtureGateway):

@@ -12,13 +12,13 @@ import pytest
 from conftest import scoped_database
 from psycopg.types.json import Jsonb
 
-from agentwriter.providers.openrouter import OpenRouterGateway
-from agentwriter.services.budgets import BudgetService
-from agentwriter.settings import Settings
-from agentwriter.storage import Repository
-from agentwriter.storage.migrate import migrate
-from agentwriter.storage.pool import database_pool
-from agentwriter.worker.runner import ProviderRuntime, process_claim
+from fieldnote.providers.openrouter import OpenRouterGateway
+from fieldnote.services.budgets import BudgetService
+from fieldnote.settings import Settings
+from fieldnote.storage import Repository
+from fieldnote.storage.migrate import migrate
+from fieldnote.storage.pool import database_pool
+from fieldnote.worker.runner import ProviderRuntime, process_claim
 
 pytestmark = pytest.mark.asyncio
 BODY = "# The village clock\n\n" + "The dragon repairs a clock beside the forest. " * 60
@@ -297,7 +297,7 @@ async def test_revision_review_migration_preserves_existing_articles_and_run_sta
         (tmp_path / path.name).write_bytes(path.read_bytes())
     async with scoped_database(setup_saver=False, migrations_directory=tmp_path) as dsn:
         run_id, revision_id = uuid4(), uuid4()
-        from agentwriter.domain import markdown_hash
+        from fieldnote.domain import markdown_hash
         digest = markdown_hash(BODY)
         async with database_pool(dsn, migrations_directory=tmp_path) as pool:
             async with pool.connection() as connection:

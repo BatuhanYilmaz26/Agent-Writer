@@ -115,8 +115,8 @@ async def test_technical_corpus_to_text_package_through_real_worker(api_client, 
 
 @pytest.mark.parametrize("language", ["en", "tr", "es", "pt", "de"])
 async def test_five_language_articles_keep_exact_bytes_and_localized_disclosures(api_client, acceptance_database, language):
-    from agentwriter.domain.languages import language_profile
-    from agentwriter.services.publishing import DISCLOSURES
+    from fieldnote.domain.languages import language_profile
+    from fieldnote.services.publishing import DISCLOSURES
 
     client, _ = api_client
     created = await client.post("/api/v1/runs", json={"topic": "A technical explanation", "language": language,

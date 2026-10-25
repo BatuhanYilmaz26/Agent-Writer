@@ -1,4 +1,4 @@
-# AgentWriter editorial rubric v1.0.0
+# Fieldnote editorial rubric v1.0.0
 
 This rubric applies to the 32 valid snapshot briefs in `briefs.jsonl` and to
 the future qualified live corpus in `live.jsonl`. Snapshot runs use fixture

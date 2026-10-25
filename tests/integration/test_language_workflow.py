@@ -4,11 +4,11 @@ import hashlib
 
 import pytest
 
-from agentwriter.domain.languages import language_profile
-from agentwriter.settings import Settings
-from agentwriter.storage import Repository
-from agentwriter.storage.pool import database_pool
-from agentwriter.worker.runner import process_claim
+from fieldnote.domain.languages import language_profile
+from fieldnote.settings import Settings
+from fieldnote.storage import Repository
+from fieldnote.storage.pool import database_pool
+from fieldnote.worker.runner import process_claim
 
 pytestmark = pytest.mark.asyncio
 

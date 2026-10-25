@@ -7,7 +7,7 @@ import hashlib
 import pytest
 from pydantic import SecretStr
 
-from agentwriter.api.security import SESSION_COOKIE
+from fieldnote.api.security import SESSION_COOKIE
 
 pytestmark = pytest.mark.asyncio
 
@@ -135,9 +135,9 @@ async def test_metrics_are_token_protected_and_low_cardinality(api_client) -> No
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/plain")
     body = response.text
-    assert 'agentwriter_runs{state="queued"} 1' in body
-    assert "agentwriter_queue_runs" in body
-    assert "agentwriter_workers" in body
+    assert 'fieldnote_runs{state="queued"} 1' in body
+    assert "fieldnote_queue_runs" in body
+    assert "fieldnote_workers" in body
     assert created["id"] not in body
     assert "metrics-test-token" not in body
 
@@ -146,7 +146,7 @@ async def test_loopback_metrics_work_without_a_token(api_client) -> None:
     client, _ = api_client
     response = await client.get("/metrics")
     assert response.status_code == 200
-    assert "agentwriter_runs" in response.text
+    assert "fieldnote_runs" in response.text
 
 
 async def test_session_cookie_flags_and_trusted_host_boundary(api_client) -> None:
@@ -166,8 +166,8 @@ async def test_session_cookie_flags_and_trusted_host_boundary(api_client) -> Non
 async def test_explicit_cors_allowlist_is_exact(acceptance_database: str) -> None:
     import httpx
 
-    from agentwriter.main import create_app
-    from agentwriter.settings import Settings
+    from fieldnote.main import create_app
+    from fieldnote.settings import Settings
 
     settings = Settings(
         _env_file=None,

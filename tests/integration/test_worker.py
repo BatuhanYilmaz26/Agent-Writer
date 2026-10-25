@@ -8,13 +8,13 @@ from typing import Any
 
 import pytest
 
-from agentwriter.domain import CreateRunRequest
-from agentwriter.graph import make_fixture_dependencies
-from agentwriter.providers.base import ModelT, ProviderError
-from agentwriter.settings import Settings
-from agentwriter.storage import Repository
-from agentwriter.storage.pool import database_pool
-from agentwriter.worker.runner import (
+from fieldnote.domain import CreateRunRequest
+from fieldnote.graph import make_fixture_dependencies
+from fieldnote.providers.base import ModelT, ProviderError
+from fieldnote.settings import Settings
+from fieldnote.storage import Repository
+from fieldnote.storage.pool import database_pool
+from fieldnote.worker.runner import (
     ProviderRuntime,
     process_claim,
     serve_worker,

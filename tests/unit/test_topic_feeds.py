@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from agentwriter.services.topics import (
+from fieldnote.services.topics import (
     FEEDS,
     MAX_FEED_BYTES,
     collect_feeds,

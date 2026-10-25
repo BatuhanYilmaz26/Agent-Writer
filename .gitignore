@@ -7,6 +7,8 @@ env/
 *.env
 *.env.*
 .envrc
+compose.override.yaml
+compose.override.yml
 !.env.example
 .local/
 .python-version.local

@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from agentwriter.providers.qualification import qualify_openrouter
+from fieldnote.providers.qualification import qualify_openrouter
 
 
 def completion(cost="0", provider="TestProvider"):

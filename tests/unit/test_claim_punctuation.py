@@ -1,6 +1,6 @@
 """Trailing citation punctuation must never hide an unsupported sentence."""
 
-from agentwriter.services.claims import extract_claim_assessments
+from fieldnote.services.claims import extract_claim_assessments
 
 
 def test_post_punctuation_citations_bind_previous_claim_not_empty_or_next_text():

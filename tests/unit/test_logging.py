@@ -2,14 +2,14 @@
 
 import logging
 
-from agentwriter.logging_config import JsonFormatter, RedactionFilter, TextFormatter, redact
+from fieldnote.logging_config import JsonFormatter, RedactionFilter, TextFormatter, redact
 
 
 def test_redaction_removes_credentials_dsns_bearer_tokens_and_cookies() -> None:
     message = (
         "Authorization: Bearer abc.def.ghi "
         "api_key=super-secret password=hunter2 "
-        "postgresql://alice:db-password@db:5432/agentwriter "
+        "postgresql://alice:db-password@db:5432/fieldnote "
         "Cookie: aw_session=session-token X-CSRF-Token: csrf-token"
     )
     cleaned = redact(message)
@@ -20,7 +20,7 @@ def test_redaction_removes_credentials_dsns_bearer_tokens_and_cookies() -> None:
 
 def test_formatters_emit_no_secret_and_keep_correlation_id() -> None:
     record = logging.LogRecord(
-        "agentwriter.test",
+        "fieldnote.test",
         logging.ERROR,
         __file__,
         1,
@@ -38,7 +38,7 @@ def test_formatters_emit_no_secret_and_keep_correlation_id() -> None:
 
 def test_redaction_filter_mutates_message_and_args_before_handlers() -> None:
     record = logging.LogRecord(
-        "agentwriter.test",
+        "fieldnote.test",
         logging.INFO,
         __file__,
         1,

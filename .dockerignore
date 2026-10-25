@@ -1,6 +1,8 @@
 .git
 .venv
 .local
+compose.override.yaml
+compose.override.yml
 .secrets
 .aws
 .ssh

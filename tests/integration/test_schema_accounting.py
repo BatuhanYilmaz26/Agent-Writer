@@ -6,9 +6,9 @@ from decimal import Decimal
 import httpx
 import pytest
 
-from agentwriter.providers.openrouter import OpenRouterGateway
-from agentwriter.settings import Settings
-from agentwriter.worker.runner import ProviderRuntime, process_claim
+from fieldnote.providers.openrouter import OpenRouterGateway
+from fieldnote.settings import Settings
+from fieldnote.worker.runner import ProviderRuntime, process_claim
 
 
 @pytest.mark.asyncio

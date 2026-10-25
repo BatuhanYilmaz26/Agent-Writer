@@ -1,5 +1,5 @@
 [project]
-name = "agentwriter"
+name = "fieldnote"
 version = "0.1.0"
 description = "Source-aware article writing with durable execution and explicit review."
 requires-python = ">=3.13,<3.14"
@@ -15,7 +15,7 @@ markers = ["integration: requires a disposable real PostgreSQL database", "exter
 target-version = "py313"
 line-length = 100
 src = ["src"]
-extend-exclude = ["src/agentwriter/_vendor"]
+extend-exclude = ["src/fieldnote/_vendor"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
@@ -23,8 +23,8 @@ select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
 [tool.mypy]
 python_version = "3.13"
 mypy_path = "src"
-packages = ["agentwriter"]
-exclude = ["src/agentwriter/_vendor/"]
+packages = ["fieldnote"]
+exclude = ["src/fieldnote/_vendor/"]
 check_untyped_defs = true
 warn_unused_ignores = true
 no_implicit_optional = true
@@ -33,5 +33,5 @@ no_implicit_optional = true
 package = false
 
 [[tool.mypy.overrides]]
-module = ["agentwriter._vendor.*"]
+module = ["fieldnote._vendor.*"]
 follow_imports = "skip"

@@ -24,6 +24,7 @@ PRIVATE_PARTS = frozenset({
 })
 PRIVATE_ROOTS = frozenset({"internal", "private", "notes", "plans", "reports", "evidence", "archives", "backups"})
 PRIVATE_NAMES = (
+    "compose.override.yaml", "compose.override.yml",
     ".env", ".env.*", "*.env", "*.env.*", "*.pem", "*.key", "*.p12", "*.pfx",
     "*.jks", "*.bundle", "*.db", "*.sqlite*", "*.dump", "*.dump.*", "*.backup", "*.backup.*", "*.log",
     "credentials.json", "service-account*.json", "id_rsa", "id_ed25519",

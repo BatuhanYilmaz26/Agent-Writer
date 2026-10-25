@@ -1,0 +1,21 @@
+[Unit]
+Description=Fieldnote bounded retention purge
+Documentation=https://github.com/BatuhanYilmaz26/Fieldnote/blob/main/docs/setup-and-operations.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=fieldnote
+Group=fieldnote
+WorkingDirectory=/opt/fieldnote
+EnvironmentFile=/etc/fieldnote/fieldnote.env
+ExecStart=/opt/fieldnote/.venv/bin/python -m fieldnote retention --batch-size 100
+Nice=10
+IOSchedulingClass=idle
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/fieldnote/.local
+TimeoutStartSec=300

@@ -7,10 +7,10 @@ from uuid import uuid4
 
 import pytest
 
-from agentwriter.settings import Settings
-from agentwriter.storage import Repository
-from agentwriter.storage.pool import database_pool
-from agentwriter.worker.runner import process_claim
+from fieldnote.settings import Settings
+from fieldnote.storage import Repository
+from fieldnote.storage.pool import database_pool
+from fieldnote.worker.runner import process_claim
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 pytestmark = pytest.mark.asyncio
@@ -44,6 +44,8 @@ async def test_browser_shell_enforces_csp_and_has_no_html_injection_sinks(
     client, _ = api_client
     response = await client.get("/")
     assert response.status_code == 200
+    assert "Fieldnote — Writing studio" in response.text
+    assert 'aria-label="Fieldnote home"' in response.text
     assert response.headers["content-type"].startswith("text/html")
     csp = response.headers["content-security-policy"]
     for directive in (

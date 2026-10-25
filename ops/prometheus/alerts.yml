@@ -1,53 +1,53 @@
 # Prometheus alert rules for the local production-shaped profile.
 # The API exposes /metrics on loopback (or with METRICS_TOKEN). Point a
-# blackbox probe at /ready for AgentWriterReadinessProbeFailing.
+# blackbox probe at /ready for FieldnoteReadinessProbeFailing.
 #
 # Every alert maps to docs/runbooks/alerts.md. Labels stay bounded: no run,
 # worker, owner or request identifiers are used as metric labels.
 groups:
-  - name: agentwriter-availability
+  - name: fieldnote-availability
     rules:
-      - alert: AgentWriterReadinessProbeFailing
-        expr: probe_success{job="agentwriter-ready"} == 0
+      - alert: FieldnoteReadinessProbeFailing
+        expr: probe_success{job="fieldnote-ready"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: AgentWriter /ready is failing
+          summary: Fieldnote /ready is failing
           description: >-
             The readiness probe has failed for one minute. The API cannot reach
             PostgreSQL or no worker is fresh. New runs may be accepted but not
             processed.
           runbook: docs/runbooks/alerts.md#readiness-probe-failing
 
-      - alert: AgentWriterNoFreshWorker
-        expr: agentwriter_workers{state="alive"} == 0
+      - alert: FieldnoteNoFreshWorker
+        expr: fieldnote_workers{state="alive"} == 0
         for: 2m
         labels:
           severity: critical
         annotations:
-          summary: No fresh AgentWriter worker heartbeat
+          summary: No fresh Fieldnote worker heartbeat
           description: >-
             Every registered worker is stale or draining. Queued and retry_wait
             runs will not progress until a worker heartbeats again.
           runbook: docs/runbooks/alerts.md#no-fresh-worker
 
-      - alert: AgentWriterQueueBacklog
-        expr: agentwriter_queue_oldest_wait_seconds > 120
+      - alert: FieldnoteQueueBacklog
+        expr: fieldnote_queue_oldest_wait_seconds > 120
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: AgentWriter queue wait exceeds two minutes
+          summary: Fieldnote queue wait exceeds two minutes
           description: >-
             The oldest waiting run has waited more than 120 seconds for five
             minutes. Check worker health, provider latency and database load.
           runbook: docs/runbooks/alerts.md#queue-backlog
 
-  - name: agentwriter-integrity
+  - name: fieldnote-integrity
     rules:
-      - alert: AgentWriterExpiredLease
-        expr: agentwriter_expired_leases > 0
+      - alert: FieldnoteExpiredLease
+        expr: fieldnote_expired_leases > 0
         for: 2m
         labels:
           severity: warning
@@ -59,36 +59,36 @@ groups:
             confirm no duplicate provider spend.
           runbook: docs/runbooks/alerts.md#expired-lease
 
-      - alert: AgentWriterRunOverdue
-        expr: agentwriter_runs_overdue > 0
+      - alert: FieldnoteRunOverdue
+        expr: fieldnote_runs_overdue > 0
         for: 2m
         labels:
           severity: warning
         annotations:
-          summary: Nonterminal AgentWriter runs are past their deadline
+          summary: Nonterminal Fieldnote runs are past their deadline
           description: >-
             At least one queued, retry_wait, running or cancel_requested run is
             past its deadline. Inspect worker drain, retry backoff and provider
             stalls before cancelling.
           runbook: docs/runbooks/alerts.md#run-overdue
 
-  - name: agentwriter-cost
+  - name: fieldnote-cost
     rules:
-      - alert: AgentWriterUnknownSpend
-        expr: agentwriter_spend_unknown_usd > 0
+      - alert: FieldnoteUnknownSpend
+        expr: fieldnote_spend_unknown_usd > 0
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: AgentWriter has provider spend with an unknown outcome
+          summary: Fieldnote has provider spend with an unknown outcome
           description: >-
             A provider call was reserved but never reconciled. Freeze paid
             routing, reconcile the call against the provider dashboard and keep
             the reservation visible until resolved.
           runbook: docs/runbooks/alerts.md#unknown-spend
 
-      - alert: AgentWriterProviderFailures
-        expr: sum(agentwriter_provider_calls{status=~"failed|unknown"}) > 5
+      - alert: FieldnoteProviderFailures
+        expr: sum(fieldnote_provider_calls{status=~"failed|unknown"}) > 5
         for: 5m
         labels:
           severity: warning

@@ -16,11 +16,11 @@ import pytest_asyncio
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
-from agentwriter.providers.base import ProviderError
-from agentwriter.services.budgets import BudgetError, BudgetService, retry_decision
-from agentwriter.storage import Repository, StorageError
-from agentwriter.storage.migrate import migrate
-from agentwriter.storage.pool import database_pool
+from fieldnote.providers.base import ProviderError
+from fieldnote.services.budgets import BudgetError, BudgetService, retry_decision
+from fieldnote.storage import Repository, StorageError
+from fieldnote.storage.migrate import migrate
+from fieldnote.storage.pool import database_pool
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 
@@ -310,9 +310,9 @@ import asyncio,json,os,sys
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
-from agentwriter.storage import Repository
-from agentwriter.storage.pool import database_pool
-from agentwriter.services.budgets import BudgetService,BudgetError
+from fieldnote.storage import Repository
+from fieldnote.storage.pool import database_pool
+from fieldnote.services.budgets import BudgetService,BudgetError
 async def main():
  async with database_pool(os.environ['BUDGET_TEST_URL'],migrations_directory=Path('migrations')) as pool:
   repo=Repository(pool,os.environ['BUDGET_TEST_URL'])

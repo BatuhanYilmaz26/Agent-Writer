@@ -1,6 +1,6 @@
 # Writing workflow
 
-AgentWriter uses a fixed LangGraph workflow. It decides whether research is required, gathers bounded evidence, validates a plan, writes sections concurrently, assembles the article, checks citations, reviews the result, and rewrites affected sections within a fixed limit.
+Fieldnote uses a fixed LangGraph workflow. It decides whether research is required, gathers bounded evidence, validates a plan, writes sections concurrently, assembles the article, checks citations, reviews the result, and rewrites affected sections within a fixed limit.
 
 ## Development output
 
@@ -44,11 +44,11 @@ Citation validation checks source identity and allowed markup. It does not prove
 
 ## Integration contract
 
-The public Python integration is `agentwriter.graph`:
+The public Python integration is `fieldnote.graph`:
 
 ```python
-from agentwriter.domain import CreateRunRequest
-from agentwriter.graph import build_graph, initial_state, make_fixture_dependencies
+from fieldnote.domain import CreateRunRequest
+from fieldnote.graph import build_graph, initial_state, make_fixture_dependencies
 
 request = CreateRunRequest(topic="How forests grow", target_words=500)
 dependencies = make_fixture_dependencies(request)

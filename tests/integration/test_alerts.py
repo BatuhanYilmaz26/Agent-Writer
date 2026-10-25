@@ -74,14 +74,14 @@ async def test_alert_conditions_are_visible_in_metrics_and_readiness(
     metrics = await client.get("/metrics")
     assert metrics.status_code == 200
     body = metrics.text
-    assert 'agentwriter_workers{state="dead"} 1' in body
-    assert 'agentwriter_workers{state="alive"} 0' in body
-    assert "agentwriter_queue_oldest_wait_seconds 600" in body
-    assert "agentwriter_runs_overdue 2" in body
-    assert "agentwriter_expired_leases 1" in body
-    assert 'agentwriter_provider_calls{status="failed"} 6' in body
-    assert "agentwriter_spend_unknown_usd 1.50000000" in body
-    assert "agentwriter_spend_unknown_calls 1" in body
+    assert 'fieldnote_workers{state="dead"} 1' in body
+    assert 'fieldnote_workers{state="alive"} 0' in body
+    assert "fieldnote_queue_oldest_wait_seconds 600" in body
+    assert "fieldnote_runs_overdue 2" in body
+    assert "fieldnote_expired_leases 1" in body
+    assert 'fieldnote_provider_calls{status="failed"} 6' in body
+    assert "fieldnote_spend_unknown_usd 1.50000000" in body
+    assert "fieldnote_spend_unknown_calls 1" in body
 
     # A failing readiness dependency must produce a probe failure, not a 500.
     async def unavailable(*, freshness_seconds: int) -> bool:

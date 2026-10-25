@@ -1,6 +1,6 @@
 # Call limits, spending and retry behavior
 
-AgentWriter authorizes each physical model request before contacting its
+Fieldnote authorizes each physical model request before contacting its
 provider. PostgreSQL stores that authorization and the maximum reserved spend.
 Multiple API or worker processes consume the same ledger rather than separate
 in-memory allowances.

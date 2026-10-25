@@ -22,7 +22,7 @@ CORPUS = ROOT / "evaluation" / "corpus" / "v2"
 CREATED_AT = "2026-10-25"
 CORPUS_VERSION = "2.0.0"
 
-RUBRIC = """# AgentWriter editorial rubric v2.0.0
+RUBRIC = """# Fieldnote editorial rubric v2.0.0
 
 This rubric applies to the 44 valid snapshot briefs in `briefs.jsonl` and to
 the future qualified live corpus in `live.jsonl`. Snapshot runs use fixture

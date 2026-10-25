@@ -19,11 +19,11 @@ import httpx
 import pytest
 import uvicorn
 
-from agentwriter.main import create_app
-from agentwriter.settings import Settings
-from agentwriter.storage import Repository
-from agentwriter.storage.pool import database_pool
-from agentwriter.worker.runner import process_claim
+from fieldnote.main import create_app
+from fieldnote.settings import Settings
+from fieldnote.storage import Repository
+from fieldnote.storage.pool import database_pool
+from fieldnote.worker.runner import process_claim
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 pytestmark = pytest.mark.asyncio

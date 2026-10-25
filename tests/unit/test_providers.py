@@ -7,14 +7,14 @@ import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
-from agentwriter.domain import ContentPlan
-from agentwriter.providers import (
+from fieldnote.domain import ContentPlan
+from fieldnote.providers import (
     FixtureGateway,
     FixtureResearchGateway,
     OpenRouterGateway,
     ProviderError,
 )
-from agentwriter.providers.treg import TregResearchGateway
+from fieldnote.providers.treg import TregResearchGateway
 
 
 class Answer(BaseModel):

@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from agentwriter.settings import Settings
-from agentwriter.storage import Repository
-from agentwriter.storage.pool import database_pool
-from agentwriter.worker.runner import process_claim
+from fieldnote.settings import Settings
+from fieldnote.storage import Repository
+from fieldnote.storage.pool import database_pool
+from fieldnote.worker.runner import process_claim
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 pytestmark = pytest.mark.asyncio
@@ -232,7 +232,7 @@ async def test_large_unicode_saved_edit_has_separate_bounded_envelope(
 ) -> None:
     import json
 
-    from agentwriter.api.middleware import MAX_EDIT_BYTES
+    from fieldnote.api.middleware import MAX_EDIT_BYTES
 
     client, _ = api_client
     run_id = (await enqueue(client, key="large-edit"))["id"]

@@ -9,9 +9,9 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from agentwriter.domain import markdown_hash
-from agentwriter.domain.publishing import PublicationRequest
-from agentwriter.services.publishing import (
+from fieldnote.domain import markdown_hash
+from fieldnote.domain.publishing import PublicationRequest
+from fieldnote.services.publishing import (
     article_html,
     build_publication,
     publication_zip,
@@ -81,7 +81,7 @@ def test_html_export_escapes_authored_markup_and_retains_code():
 def test_vendored_counter_source_matches_reviewed_manifest():
     from pathlib import Path
 
-    root = Path(__file__).resolve().parents[2] / "src/agentwriter/_vendor/twitter_text"
+    root = Path(__file__).resolve().parents[2] / "src/fieldnote/_vendor/twitter_text"
     manifest = json.loads((root / "manifest.json").read_text())
     for path, hashes in manifest.items():
         assert hashlib.sha256((root / path).read_bytes()).hexdigest() == hashes["sha256"]

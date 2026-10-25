@@ -1,8 +1,8 @@
-# Configure AgentWriter
+# Configure Fieldnote
 
-AgentWriter starts with a local, synthetic-provider profile. It does not contact a model or research vendor with the default settings. Synthetic sources and generated text are development fixtures, not real research.
+Fieldnote starts with a local, synthetic-provider profile. It does not contact a model or research vendor with the default settings. Synthetic sources and generated text are development fixtures, not real research.
 
-Configuration is read by `agentwriter.settings.Settings`. Set environment variables before starting the API or worker. Environment values override an explicitly loaded dotenv file. Dotenv files are **not** discovered automatically; the launcher must request the file or you may pass `Settings(_env_file=".env")` in a Python integration. Keep `.env` and credentials out of Git.
+Configuration is read by `fieldnote.settings.Settings`. Set environment variables before starting the API or worker. Environment values override an explicitly loaded dotenv file. Dotenv files are **not** discovered automatically; the launcher must request the file or you may pass `Settings(_env_file=".env")` in a Python integration. Keep `.env` and credentials out of Git.
 
 ## Local development
 
