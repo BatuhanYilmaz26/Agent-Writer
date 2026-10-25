@@ -132,6 +132,27 @@ async def test_every_model_stage_receives_the_selected_language(language):
         assert any(issue["code"] == "language_review_required" for issue in result["issues"])
 
 
+@pytest.mark.parametrize("words", [200, 350, 550])
+async def test_short_technical_profile_reaches_every_model_stage(words):
+    request, gateway = scripted()
+    request = CreateRunRequest(**{**request.model_dump(), "target_words": words,
+                                 "editorial_profile": "technical-v1", "angle": "A focused story",
+                                 "author_notes": "An author-provided observation."})
+    gateway._responses["plan"]["target_words"] = words
+    for task in gateway._responses["plan"]["tasks"]:
+        task["target_words"] = words // 2
+        for revision in range(3):
+            gateway._responses[f"section:{task['id']}:{revision}"]["content_markdown"] = "dragon " * (words // 2)
+    result = await build_graph(GraphDependencies(model=gateway, request=request)).compile().ainvoke(initial_state())
+    assert result["outcome"] == "succeeded"
+    assert result["model_calls"] == 4
+    for messages in gateway.messages.values():
+        assert "Never invent first-person experience" in messages[0]["content"]
+        assert "unexecuted code" in messages[0]["content"]
+        brief = json.loads(messages[1]["content"])["brief"]
+        assert brief["angle"] == request.angle and brief["author_notes"] == request.author_notes
+
+
 async def test_review_rejection_stops_at_round_cap() -> None:
     request, gateway = scripted(rejected_rounds=99)
     result = await build_graph(GraphDependencies(model=gateway, request=request)).compile().ainvoke(initial_state())

@@ -6,12 +6,13 @@ from agentwriter.domain.research import factual_research_reason, is_general_or_c
 
 def determine_research(request: CreateRunRequest) -> ResearchDecision:
     """Return the effective research policy without an LLM network call."""
-    explicit_reason = factual_research_reason(request.topic, request.instructions)
+    context = request.research_context()
+    explicit_reason = "selected_sources" if request.reference_urls else factual_research_reason(request.topic, context)
     if request.research_mode == "required":
         reason = "explicit_required"
         needed = True
     elif request.research_mode == "off":
-        if explicit_reason or not is_general_or_creative(request.topic, request.instructions):
+        if explicit_reason or not is_general_or_creative(request.topic, context):
             # Defense for unvalidated/model_construct inputs; ordinary callers
             # already get this error at the request validation boundary.
             raise ValueError("research_required: incompatible research-off brief")
@@ -20,7 +21,7 @@ def determine_research(request: CreateRunRequest) -> ResearchDecision:
     elif explicit_reason:
         reason = explicit_reason
         needed = True
-    elif is_general_or_creative(request.topic, request.instructions):
+    elif is_general_or_creative(request.topic, context):
         reason = "general_or_creative_drafting"
         needed = False
     else:

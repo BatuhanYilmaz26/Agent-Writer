@@ -79,7 +79,7 @@ Settings validation rejects incompatible bounds, blank inputs, unsupported provi
 ## Brief and research validation
 
 Briefs require 1–500 topic characters, at most 4,000 instruction characters,
-1–240 audience characters, 1–120 tone characters and 500–3,000 target words.
+1–240 audience characters, 1–120 tone characters and 200–3,000 target words. The API retains its 1,200-word default for existing clients; the browser starts at 550. Optional technical briefs accept a versioned `technical-v1` editorial profile, a 1,000-character angle, 4,000-character author observations, up to four public reference URLs and selected publishing destinations. All fields are saved with the brief.
 `language` accepts `en` (English, the default), `tr` (Turkish), `es` (Spanish),
 `pt` (Portuguese) or `de` (German). Region-specific tags and other languages are
 not enabled; put a regional preference in `instructions`. The language is part

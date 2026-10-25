@@ -239,7 +239,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/v1/runs", status_code=202)
     async def submit(brief: CreateRunRequest, request: Request, owner: str = Depends(authenticated),
                      idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200)):
-        run = await request.app.state.repository.create_run(owner, brief.model_dump(mode="json"), idempotency_key)
+        run = await request.app.state.repository.create_run(owner, brief.persistence_payload(), idempotency_key)
         base = f"/api/v1/runs/{run['id']}"
         return {**run, "status_url": base, "events_url": base + "/events"}
 

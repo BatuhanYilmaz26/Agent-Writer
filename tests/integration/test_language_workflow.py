@@ -75,6 +75,32 @@ async def test_api_rejects_an_unconfigured_language_before_creating_a_run(api_cl
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize("language", ["en", "tr", "es", "pt", "de"])
+async def test_short_profile_brief_round_trip_and_idempotency(api_client, acceptance_database, language):
+    from tests.integration.test_api import run_one_fixture_job
+
+    client, _ = api_client
+    payload = {"topic": "A technical explanation", "language": language, "target_words": 350,
+               "editorial_profile": "technical-v1", "angle": "A practical limitation",
+               "author_notes": "My own observation", "destinations": ["medium", "linkedin"],
+               "research_mode": "required"}
+    headers = {"Idempotency-Key": "short-profile"}
+    created = await client.post("/api/v1/runs", json=payload, headers=headers)
+    assert created.status_code == 202, created.text
+    run_id = created.json()["id"]
+    duplicate = await client.post("/api/v1/runs", json=payload, headers=headers)
+    assert duplicate.json()["id"] == run_id
+    conflict = await client.post("/api/v1/runs", json={**payload, "angle": "Another angle"}, headers=headers)
+    assert conflict.status_code == 409
+    await run_one_fixture_job(acceptance_database)
+    reopened = (await client.get(f"/api/v1/runs/{run_id}")).json()
+    for key, value in payload.items():
+        assert reopened["request"][key] == value
+    article = (await client.get(f"/api/v1/runs/{run_id}/article")).json()
+    assert article["review_status"] == "needs_review"
+    assert len(article["citation_map"]["editable_markdown"].split()) < 450
+
+
 async def test_changing_language_does_not_reuse_another_language_run(api_client):
     client, _ = api_client
     headers = {"Idempotency-Key": "same-brief-different-language"}

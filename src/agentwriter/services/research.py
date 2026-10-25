@@ -187,6 +187,7 @@ class ResearchCoordinator:
         queries: tuple[str, ...] | list[str],
         *,
         goal: str = "",
+        reference_urls: tuple[str, ...] = (),
     ) -> ResearchOutcome:
         bounded: list[str] = []
         seen_queries: set[str] = set()
@@ -201,6 +202,9 @@ class ResearchCoordinator:
 
         outcome = ResearchOutcome()
         candidates: dict[str, dict[str, Any]] = {}
+        for url in reference_urls[:4]:
+            normalized = canonicalize_url(url)
+            candidates[normalized] = {"url": normalized, "_rank": 100, "selected_by_author": True}
         for query in bounded:
             try:
                 found = await self.gateway.search(

@@ -38,10 +38,15 @@ Fill in:
 | Field | Required | Notes |
 |---|---|---|
 | Topic | Yes | 1–500 characters. Be specific about the reader, promise and facts to check. |
-| Reader | Yes | 1–240 characters. Defaults to “General readers”. |
+| Reader | Yes | 1–240 characters. The studio defaults to “Technical practitioners”. |
+| Writing style | Yes | **Concise technical** focuses on one useful idea, examples and limitations; **General writing** keeps the original profile. |
+| Your angle | No | Up to 1,000 characters describing your point of view. |
+| Your observations | No | Up to 4,000 characters of your own experience or notes; these are sent to your configured model with the brief. |
+| Primary source URLs | No | Up to four public URLs, one per line, prioritized during research. Unsupported or unavailable sources remain explicit gaps. |
+| Prepare for | Yes | Select Medium, LinkedIn and/or X. The article remains the canonical source for later adaptations. |
 | Tone | Yes | One of the offered tones; stored with the brief. |
 | Language | Yes | English, Türkçe, Español, Português or Deutsch. Defaults to English. |
-| Target words | Yes | 500–3,000. |
+| Target words | Yes | 200–3,000. The studio starts at 550, with quick targets of 350, 550 and 800. |
 | Research | Yes | **Required**, **Automatic** or **Off**. |
 | Additional direction → Anything else? | No | Up to 4,000 characters for structure, exclusions or questions. |
 

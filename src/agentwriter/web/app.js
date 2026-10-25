@@ -1157,9 +1157,11 @@ async function selectRun(id, options = {}) {
     const run = await refreshRun();
     if (state.activeRun !== id) return;
     if (run) {
-      for (const field of ["topic", "audience", "tone", "language", "target_words", "research_mode", "instructions"]) {
-        $(field).value = run.request[field] ?? (field === "language" ? "en" : "");
+      for (const field of ["topic", "audience", "tone", "language", "target_words", "research_mode", "instructions", "editorial_profile", "angle", "author_notes"]) {
+        $(field).value = run.request[field] ?? (field === "language" ? "en" : field === "editorial_profile" ? "standard" : "");
       }
+      $("reference_urls").value = (run.request.reference_urls || []).join("\n");
+      for (const destination of ["medium", "linkedin", "x"]) $("destination-" + destination).checked = (run.request.destinations || ["medium", "linkedin", "x"]).includes(destination);
       $("brief-extra").open = Boolean(run.request.instructions);
       updateBriefDetails();
     }
@@ -1185,7 +1187,7 @@ async function selectRun(id, options = {}) {
 
 function researchWarning() {
   const topic = $("topic").value;
-  const instructions = $("instructions").value;
+  const instructions = [$("instructions").value, $("angle").value, $("author_notes").value, $("reference_urls").value].join(" ");
   const mode = $("research_mode").value;
   const sourceDependent = /\b(latest|current|currently|today|news|recent|price|pricing|cost|statistic|study|report|version|release|law|regulation|medical|financial|tax)\b|\d{4}|\d+%/i.test(`${topic} ${instructions}`);
   const localizedFacts = /güncel|bugün|fiyat|maliyet|istatistik|sürüm|mevzuat|tıbbi|vergi|yatırım|fuentes?|precios?|noticias|médic|impuesto|preço|atual|notícias|pesquisa|investimento|aktuell|nachrichten|preise?|gesetz|medizin|steuer|quellen/iu.test(`${topic} ${instructions}`);
@@ -1209,6 +1211,11 @@ function buildBrief() {
     target_words: Number($("target_words").value),
     research_mode: $("research_mode").value,
     instructions: $("instructions").value.trim(),
+    destinations: ["medium", "linkedin", "x"].filter((name) => $("destination-" + name).checked),
+    editorial_profile: $("editorial_profile").value,
+    angle: $("angle").value.trim(),
+    author_notes: $("author_notes").value.trim(),
+    reference_urls: $("reference_urls").value.split(/\r?\n/).map((url) => url.trim()).filter(Boolean),
   };
 }
 

@@ -26,6 +26,31 @@ def task(task_id: str, order: int, words: int = 250) -> SectionTask:
     return SectionTask(id=task_id, order=order, title="A section", goal="Explain the idea", target_words=words)
 
 
+def test_technical_brief_keeps_legacy_hashes_and_validates_new_context() -> None:
+    from agentwriter.storage.repository import canonical_hash
+
+    legacy = {"topic": "A forest", "audience": "General readers", "tone": "clear",
+              "language": "en", "target_words": 1200, "research_mode": "required", "instructions": ""}
+    assert CreateRunRequest(**legacy).request_hash() == canonical_hash(legacy)
+    updated = CreateRunRequest(**{**legacy, "target_words": 350, "editorial_profile": "technical-v1",
+                                 "angle": "A useful tradeoff", "author_notes": "My own observation.",
+                                 "reference_urls": ["https://example.org/paper?utm_source=x#top"]})
+    assert updated.reference_urls == ("https://example.org/paper",)
+    assert updated.request_hash() != canonical_hash(legacy)
+    assert updated.persistence_payload()["author_notes"] == "My own observation."
+    assert CreateRunRequest.model_validate(updated.persistence_payload()) == updated
+    for changes in ({"target_words": 199}, {"target_words": 3001}, {"angle": "x" * 1001},
+                    {"author_notes": "x" * 4001}, {"editorial_profile": "unknown"},
+                    {"reference_urls": ["http://localhost/private"]}, {"destinations": []},
+                    {"destinations": ["unsupported"]}):
+        with pytest.raises(ValidationError):
+            CreateRunRequest.model_validate({**legacy, **changes})
+    for context in ({"angle": "The latest pricing"}, {"author_notes": "Python benchmarks"},
+                    {"reference_urls": ["https://example.org/paper"]}):
+        with pytest.raises(ValidationError):
+            CreateRunRequest(topic="Explain how forests grow", research_mode="off", **context)
+
+
 def test_brief_bounds_unknown_fields_and_scalar_strictness() -> None:
     for change in (
         {"topic": "   "}, {"topic": "x" * 501}, {"target_words": "500"},

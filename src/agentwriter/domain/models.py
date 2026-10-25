@@ -70,15 +70,46 @@ class CreateRunRequest(DomainModel):
     audience: ShortText = "General readers"
     tone: Annotated[str, StringConstraints(strict=True, min_length=1, max_length=120)] = "clear"
     language: ArticleLanguage = "en"
-    target_words: Annotated[int, Field(strict=True, ge=500, le=3000)] = 1200
+    target_words: Annotated[int, Field(strict=True, ge=200, le=3000)] = 1200
     research_mode: ResearchMode = "required"
     instructions: Annotated[str, StringConstraints(strict=True, max_length=4000)] = ""
+    editorial_profile: Literal["standard", "technical-v1"] = "standard"
+    angle: Annotated[str, StringConstraints(strict=True, max_length=1000)] = ""
+    author_notes: Annotated[str, StringConstraints(strict=True, max_length=4000)] = ""
+    reference_urls: Annotated[tuple[str, ...], Field(max_length=4)] = ()
+    destinations: Annotated[tuple[Literal["medium", "linkedin", "x"], ...], Field(min_length=1, max_length=3)] = ("medium", "linkedin", "x")
+
+    @field_validator("destinations")
+    @classmethod
+    def unique_destinations(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(values))
+
+    @field_validator("reference_urls")
+    @classmethod
+    def public_references(cls, urls: tuple[str, ...]) -> tuple[str, ...]:
+        from agentwriter.services.urls import canonicalize_url
+
+        return tuple(dict.fromkeys(canonicalize_url(url) for url in urls))
+
+    def research_context(self) -> str:
+        return " ".join((self.instructions, self.angle, self.author_notes, *self.reference_urls))
+
+    def persistence_payload(self) -> dict[str, Any]:
+        """Preserve pre-profile request hashes for unchanged legacy briefs."""
+        data = self.model_dump(mode="json")
+        for name, default in (("editorial_profile", "standard"), ("angle", ""),
+                              ("author_notes", ""), ("reference_urls", []),
+                              ("destinations", ["medium", "linkedin", "x"])):
+            if data[name] == default:
+                del data[name]
+        return data
 
     @model_validator(mode="after")
     def research_off_boundary(self) -> CreateRunRequest:
         if self.research_mode == "off":
-            reason = factual_research_reason(self.topic, self.instructions)
-            if reason or not is_general_or_creative(self.topic, self.instructions):
+            context = self.research_context()
+            reason = factual_research_reason(self.topic, context)
+            if self.reference_urls or reason or not is_general_or_creative(self.topic, context):
                 raise ValueError(
                     "research_required: research off is limited to clear creative or "
                     "general explanatory briefs without current, numeric, named-product "
@@ -89,7 +120,7 @@ class CreateRunRequest(DomainModel):
     def request_hash(self) -> str:
         import json
 
-        canonical = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        canonical = json.dumps(self.persistence_payload(), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -121,7 +152,7 @@ class ContentPlan(DomainModel):
     title: ShortText
     audience: ShortText = "General readers"
     tone: ShortText = "clear"
-    target_words: Annotated[int, Field(strict=True, ge=500, le=3000)]
+    target_words: Annotated[int, Field(strict=True, ge=200, le=3000)]
     tasks: Annotated[tuple[SectionTask, ...], Field(min_length=2, max_length=8)]
 
     @model_validator(mode="after")
