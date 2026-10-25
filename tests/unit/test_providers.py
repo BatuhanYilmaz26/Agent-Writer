@@ -1,10 +1,13 @@
 import json
+import traceback
+from dataclasses import asdict
 from decimal import Decimal
 
 import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict, Field
 
+from agentwriter.domain import ContentPlan
 from agentwriter.providers import (
     FixtureGateway,
     FixtureResearchGateway,
@@ -151,6 +154,90 @@ async def test_invalid_or_truncated_output_is_never_accepted(payload, code):
             await OpenRouterGateway(client, "test-key").generate(
                 Answer, [{"role": "user", "content": "Write"}], "call"
             )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("content,kind", [
+    ("private upstream malformed JSON", "json"),
+    ('{"text":"private content","count":99,"private-key":"private-value"}', "schema"),
+])
+async def test_validation_diagnostics_preserve_only_category_attribution_and_billing(content, kind):
+    api_key = "private-token"
+    payload = completion(
+        usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15, "cost": "0",
+               "private-account": "private-value"},
+        choices=[{"finish_reason": "stop", "message": {"content": content}}],
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda _: httpx.Response(200, json=payload),
+    )) as client:
+        with pytest.raises(ProviderError) as error:
+            await OpenRouterGateway(client, api_key).generate(
+                Answer, [{"role": "user", "content": "Write"}], "call",
+            )
+    failure = error.value
+    assert failure.validation_kind == kind and failure.schema_name == "Answer"
+    assert failure.response is not None
+    assert failure.response.cost_usd == Decimal("0")
+    assert failure.response.usage == {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+    assert failure.response.resolved_model == "vendor/actual-free-model"
+    assert failure.response.provider == "TestProvider" and failure.response.request_id == "gen-test"
+    saved = json.dumps(asdict(failure.response), default=str) + "".join(traceback.format_exception(failure))
+    assert "private" not in saved
+
+
+@pytest.mark.asyncio
+async def test_cross_field_plan_failure_is_distinct_from_json_or_field_validation():
+    plan = {
+        "title": "A story", "target_words": 500, "tasks": [
+            {"id": "opening", "order": 1, "title": "Opening", "goal": "Begin", "target_words": 200},
+            {"id": "ending", "order": 2, "title": "Ending", "goal": "End", "target_words": 200},
+        ],
+    }
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(
+        200, json=completion(choices=[{"finish_reason": "stop", "message": {"content": json.dumps(plan)}}]),
+    ))) as client:
+        with pytest.raises(ProviderError) as error:
+            await OpenRouterGateway(client, "test-key").generate(
+                ContentPlan, [{"role": "user", "content": "Write"}], "plan",
+            )
+    assert error.value.validation_kind == "semantics"
+    assert error.value.schema_name == "ContentPlan"
+    assert error.value.response.cost_usd is None
+
+
+@pytest.mark.asyncio
+async def test_envelope_failure_preserves_billing_but_rejects_invalid_metadata_identifiers():
+    payload = completion(
+        id="private\nrequest", model="private\nmodel", provider="private\nprovider",
+        choices=[], usage={"total_tokens": 9, "cost": "0"},
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload))) as client:
+        with pytest.raises(ProviderError) as error:
+            await OpenRouterGateway(client, "test-key").generate(
+                Answer, [{"role": "user", "content": "Write"}], "call",
+            )
+    failure = error.value
+    assert failure.validation_kind == "envelope"
+    assert failure.response.cost_usd == 0 and failure.response.usage == {"total_tokens": 9}
+    assert failure.response.request_id is None
+    assert failure.response.resolved_model is None and failure.response.provider is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("usage", [
+    {"total_tokens": 10_000_001, "cost": "1e100"},
+    {"prompt_tokens": 10_000_000, "completion_tokens": 1, "cost": True},
+    {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 99, "cost": "NaN"},
+])
+async def test_unusable_accounting_values_remain_unknown(usage):
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(
+        200, json=completion(usage=usage),
+    ))) as client:
+        result = await OpenRouterGateway(client, "test-key").generate(
+            Answer, [{"role": "user", "content": "Write"}], "call",
+        )
+    assert result.usage is None and result.cost_usd is None
 
 
 @pytest.mark.asyncio

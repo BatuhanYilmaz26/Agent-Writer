@@ -16,11 +16,12 @@ from typing import Any, Literal
 import httpx
 from pydantic import ValidationError
 
-from agentwriter.providers.base import ModelResult, ModelT, ProviderError
+from agentwriter.providers.base import ModelResult, ModelT, ProviderError, ResponseMetadata
 
 _ORIGIN = "https://openrouter.ai/api/v1"
 _MAX_RESPONSE_BYTES = 1_048_576
 _SAFE_ID = re.compile(r"^[A-Za-z0-9_.:/-]{1,160}$")
+_SAFE_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/() -]{0,159}$")
 
 
 def _strict_schema(value: Any) -> Any:
@@ -64,18 +65,27 @@ def _usage(payload: dict[str, Any]) -> tuple[dict[str, Any] | None, Decimal | No
     normalized: dict[str, Any] = {}
     for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
         value = raw.get(key)
-        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 10_000_000:
             normalized[key] = value
+    if "prompt_tokens" in normalized and "completion_tokens" in normalized:
+        total = normalized["prompt_tokens"] + normalized["completion_tokens"]
+        if total > 10_000_000 or ("total_tokens" in normalized and normalized["total_tokens"] != total):
+            normalized = {}
     cost: Decimal | None = None
     raw_cost = raw.get("cost")
     if raw_cost is not None and not isinstance(raw_cost, bool):
         try:
             candidate = Decimal(str(raw_cost))
-            if candidate.is_finite() and candidate >= 0:
+            if candidate.is_finite() and 0 <= candidate < 1_000_000_000:
                 cost = candidate
         except (ValueError, InvalidOperation):
             pass
     return normalized or None, cost
+
+
+def _identity(value: Any, *, label: bool = False) -> str | None:
+    pattern = _SAFE_LABEL if label else _SAFE_ID
+    return value if isinstance(value, str) and pattern.fullmatch(value) else None
 
 
 class OpenRouterGateway:
@@ -222,40 +232,57 @@ class OpenRouterGateway:
             ) from exc
         if not isinstance(payload, dict) or payload.get("error"):
             raise ProviderError("provider_invalid_response", outcome_unknown=True)
+        usage, cost = _usage(payload)
+        metadata = ResponseMetadata(
+            requested_model=self.model, resolved_model=_identity(payload.get("model")),
+            provider=_identity(payload.get("provider"), label=True),
+            request_id=_identity(payload.get("id")), usage=usage, cost_usd=cost,
+        )
+        schema_name = _identity(schema.__name__)
         try:
             choices = payload["choices"]
             if not isinstance(choices, list) or len(choices) != 1:
                 raise ValueError("Expected one response choice")
             choice = choices[0]
             if choice.get("finish_reason") != "stop":
-                raise ProviderError("provider_incomplete_output", outcome_unknown=True)
+                raise ProviderError("provider_incomplete_output", outcome_unknown=True, response=metadata)
             message = choice["message"]
             if message.get("refusal"):
-                raise ProviderError("provider_refusal")
+                raise ProviderError("provider_refusal", response=metadata)
             content = message["content"]
             if not isinstance(content, str) or not content.strip():
                 raise ValueError("Empty content")
             data = schema.model_validate_json(content)
-            resolved_model = payload["model"]
-            if not isinstance(resolved_model, str) or not _SAFE_ID.fullmatch(resolved_model):
+            resolved_model = metadata.resolved_model
+            if resolved_model is None:
                 raise ValueError("Missing resolved model identity")
         except ProviderError:
             raise
-        except (KeyError, TypeError, AttributeError, ValueError, ValidationError) as exc:
-            raise ProviderError("provider_schema_invalid", outcome_unknown=True) from exc
-        usage, cost = _usage(payload)
-        request_id = payload.get("id")
-        resolved_provider = payload.get("provider")
+        except ValidationError as exc:
+            # Error input, locations, context and messages can contain private
+            # content. Retain only a fixed category, never the raw errors.
+            types = {error["type"] for error in exc.errors(
+                include_url=False, include_context=False, include_input=False,
+            )}
+            kind: Literal["json", "schema", "semantics", "envelope"] = (
+                "json" if "json_invalid" in types else
+                "semantics" if "value_error" in types else "schema"
+            )
+            raise ProviderError(
+                "provider_schema_invalid", outcome_unknown=True, response=metadata,
+                validation_kind=kind, schema_name=schema_name,
+            ) from None
+        except (KeyError, TypeError, AttributeError, ValueError):
+            raise ProviderError(
+                "provider_schema_invalid", outcome_unknown=True, response=metadata,
+                validation_kind="envelope", schema_name=schema_name,
+            ) from None
         return ModelResult(
             data=data,
             requested_model=self.model,
             resolved_model=resolved_model,
-            request_id=request_id
-            if isinstance(request_id, str) and len(request_id) <= 160
-            else None,
-            provider=resolved_provider
-            if isinstance(resolved_provider, str) and len(resolved_provider) <= 160
-            else None,
+            request_id=metadata.request_id,
+            provider=metadata.provider,
             usage=usage,
             cost_usd=cost,
             duration_seconds=time.monotonic() - started,

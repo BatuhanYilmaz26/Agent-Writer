@@ -129,3 +129,23 @@ async def test_paid_model_is_rejected_before_even_account_lookup():
         with pytest.raises(ValueError):
             await qualify_openrouter(client, "test-token", model="vendor/paid-model")
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_rejected_probe_keeps_safe_billing_metadata_without_qualifying():
+    def respond(request):
+        if request.url.path.endswith("/key"):
+            return httpx.Response(200, json={"data": {"is_free_tier": True}})
+        payload = completion()
+        payload["choices"][0]["message"]["content"] = '{"status":"private invalid content"}'
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        report = await qualify_openrouter(client, "private-key")
+    assert report["qualified"] is False and report["code"] == "provider_schema_invalid"
+    assert report["probe"]["schema_valid"] is False
+    assert report["probe"]["cost_usd"] == "0"
+    assert report["probe"]["resolved_model"] == "vendor/free-model"
+    assert report["probe"]["validation_kind"] == "schema"
+    assert report["probe"]["schema_name"] == "QualificationProbe"
+    assert "private" not in json.dumps(report)

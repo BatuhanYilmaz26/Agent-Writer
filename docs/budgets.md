@@ -62,6 +62,12 @@ release gates.
 
 ## Retry and circuit policy
 
+Content acceptance and billing are separate. A structured AI response that
+fails validation is a failed output, while its reported usage and cost are
+still recorded when available. A known zero charge can be reconciled; missing
+cost retains the conservative reservation. Rejected content never becomes an
+article merely because its billing is known.
+
 The dispatch service provides one retry decision; gateways do not add their own
 retries. The default maximum is three attempts, including the first. Transient
 errors use bounded exponential delay/jitter and honor a valid provider wait.

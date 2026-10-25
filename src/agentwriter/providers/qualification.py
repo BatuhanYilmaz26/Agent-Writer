@@ -125,6 +125,17 @@ async def qualify_openrouter(
             raise ProviderError("qualification_response_metadata_missing")
         report["qualified"] = True
     except ProviderError as exc:
+        if exc.response:
+            report["probe"] = {
+                "schema_valid": False,
+                "requested_model": exc.response.requested_model,
+                "resolved_model": exc.response.resolved_model,
+                "provider": exc.response.provider,
+                "usage": exc.response.usage,
+                "cost_usd": str(exc.response.cost_usd) if exc.response.cost_usd is not None else None,
+                "validation_kind": exc.validation_kind,
+                "schema_name": exc.schema_name,
+            }
         report["code"] = exc.code
         report["retryable"] = exc.retryable
         report["outcome_unknown"] = exc.outcome_unknown

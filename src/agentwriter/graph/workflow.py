@@ -259,7 +259,13 @@ def build_graph(dependencies: GraphDependencies) -> StateGraph:
 
     async def plan_node(state: GraphState) -> dict[str, Any]:
         result = await deps.call(
-            ContentPlan, "plan", "Plan an ordered article with two to eight sections. Include introduction and conclusion in the total word budget.",
+            ContentPlan, "plan", (
+                "Plan an ordered article with two to eight sections, including introduction and conclusion. "
+                "Copy the brief's target_words exactly to the plan. Assign each task an integer word budget "
+                "between 50 and 2500; their sum must equal the plan target_words exactly. "
+                "Use unique task IDs and contiguous order values from 1 to the number of tasks. "
+                "Choose evidence_ids only from the supplied evidence keys; use empty arrays if there is no evidence."
+            ),
             {"brief": deps.request.model_dump(mode="json"), "evidence": state.get("excerpts", {})},
         )
         plan = ContentPlan.model_validate(result.data.model_dump(mode="json"))

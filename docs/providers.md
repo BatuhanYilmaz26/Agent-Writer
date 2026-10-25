@@ -43,6 +43,25 @@ decisions; this transport never retries by itself. A rate-limit error preserves
 the caller must retain its reservation. Missing usage or cost remains unknown,
 not zero. Local cancellation does not prove remote processing or billing stopped.
 
+### When an AI response is rejected
+
+An HTTP success does not guarantee an acceptable article. AgentWriter checks
+the response envelope, JSON fields and application rules, including section
+budgets that must add up to the requested total. Invalid content is rejected.
+
+The local call record retains available model/provider attribution, request ID,
+token counts and reported cost even when content validation fails. Its
+`validation_kind` distinguishes invalid JSON (`json`), field or type constraints
+(`schema`), application rules (`semantics`) and the response wrapper (`envelope`).
+`schema_name` identifies the expected contract. These categories contain no
+generated text, field values or raw validation errors. They help investigate
+future failures; they cannot recover information discarded by an older version.
+
+A failed output can still consume quota or incur a reported charge. Missing
+usage or cost stays unknown. The configured schema-repair allowance remains
+bounded and each repair requires its own quota reservation. A reported charge
+on a free-only route stops the run before any repair is attempted.
+
 ### Check your OpenRouter account
 
 Keep your key in an ignored file or `OPENROUTER_API_KEY`; never pass it on the
@@ -83,6 +102,7 @@ Official references, consulted 25 October 2026:
 - [Structured output and endpoint support](https://openrouter.ai/docs/guides/features/structured-outputs)
 - [Provider routing and data policies](https://openrouter.ai/docs/guides/routing/provider-selection)
 - [Account limits](https://openrouter.ai/docs/api_reference/limits)
+- [Pydantic validation errors](https://docs.pydantic.dev/latest/errors/errors/)
 - [HTTPX async client lifecycle](https://www.python-httpx.org/async/)
 
 ## Treg

@@ -147,12 +147,34 @@ class AccountedGateway:
                 reserved_cost_usd=amount if self.settings.model_policy == "budgeted" else None,
             )
         except BaseException as exc:
-            await self.budget.reconcile(
+            response = exc.response if isinstance(exc, ProviderError) else None
+            metadata = {"code": str(getattr(exc, "code", "dispatch_failed"))[:160]}
+            if isinstance(exc, ProviderError):
+                if exc.validation_kind:
+                    metadata["validation_kind"] = exc.validation_kind
+                if exc.schema_name:
+                    metadata["schema_name"] = exc.schema_name
+            if response:
+                metadata.update({
+                    "requested_model": response.requested_model,
+                    "resolved_model": response.resolved_model or "unknown",
+                    "provider": response.provider or "unknown",
+                    **({"request_id": response.request_id} if response.request_id else {}),
+                })
+            accounting = await self.budget.reconcile(
                 reservation,
-                outcome="unknown" if getattr(exc, "outcome_unknown", False) else "failed",
+                usage_tokens=_usage_tokens(response.usage) if response else None,
+                actual_cost_usd=response.cost_usd if response else None,
+                outcome=("unknown" if response is None and getattr(exc, "outcome_unknown", False)
+                         else "failed"),
                 retryable=bool(getattr(exc, "retryable", False)),
-                metadata={"code": str(getattr(exc, "code", "dispatch_failed"))[:160]},
+                metadata=metadata,
             )
+            if (response and self.settings.model_policy == "free_only"
+                    and response.cost_usd is not None and response.cost_usd > 0):
+                raise ProviderError("provider_cost_policy_violation") from None
+            if accounting.reservation_overrun:
+                raise ProviderError("provider_cost_overrun") from None
             raise
         actual = result.cost_usd
         if (
@@ -212,6 +234,8 @@ class AccountedGateway:
                     "role": "user",
                     "content": (
                         "The previous response did not match the required JSON schema. "
+                        "Recheck the original instructions, including relationships between fields "
+                        "such as exact totals and contiguous task order. "
                         "Return only one JSON object matching that schema. Do not add "
                         "commentary, links, tools or markdown fences."
                     ),
@@ -286,6 +310,11 @@ async def provider_runtime(settings: Settings):
 
 
 def _safe_message(code: str) -> str:
+    if code == "provider_schema_invalid":
+        return (
+            "The AI response did not match the required writing format. "
+            "No invalid content was accepted. Check the provider before starting a new draft."
+        )
     if code in {
         "provider_authentication_failed",
         "provider_policy_denied",

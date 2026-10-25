@@ -234,6 +234,7 @@ external font or icon service is contacted when you use the app.
 | “The brief is too large…” (`413`) | Request body exceeds the configured limit. | Shorten the brief. |
 | “You have reached the current run limit…” (`429`) | Too many non-terminal runs or queue full. | Wait, cancel or delete a run. |
 | “The service is temporarily unavailable…” (`503`) | Database or provider dependency is unavailable. | Retry after the service recovers; saved work is durable. |
+| “The AI response did not match the required writing format…” | The provider returned content that failed validation. | Check provider status and limits before starting a new draft. Invalid content was not accepted; partial work, if available, still needs review. |
 
 ## Boundaries
 

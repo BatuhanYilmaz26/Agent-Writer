@@ -2,11 +2,23 @@
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Protocol, TypeVar
+from typing import Any, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
+
+
+@dataclass(frozen=True, slots=True)
+class ResponseMetadata:
+    """Normalized attribution and billing, independent of content acceptance."""
+
+    requested_model: str
+    resolved_model: str | None = None
+    provider: str | None = None
+    request_id: str | None = None
+    usage: dict[str, Any] | None = None
+    cost_usd: Decimal | None = None
 
 
 class ProviderError(Exception):
@@ -23,12 +35,18 @@ class ProviderError(Exception):
         retryable: bool = False,
         retry_after: float | None = None,
         outcome_unknown: bool = False,
+        response: ResponseMetadata | None = None,
+        validation_kind: Literal["json", "schema", "semantics", "envelope"] | None = None,
+        schema_name: str | None = None,
     ) -> None:
         super().__init__(code)
         self.code = code
         self.retryable = retryable
         self.retry_after = retry_after
         self.outcome_unknown = outcome_unknown
+        self.response = response
+        self.validation_kind = validation_kind
+        self.schema_name = schema_name
 
 
 @dataclass(frozen=True, slots=True)

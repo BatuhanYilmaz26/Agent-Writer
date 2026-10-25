@@ -23,7 +23,10 @@ BUDGET_LOCK = 1195461971
 _IDENTITY = re.compile(r"^[A-Za-z0-9_.:/-]{1,160}$")
 _MONEY_UNIT = Decimal("0.00000001")
 _MAX_MONEY = Decimal("1000000000")
-_SAFE_METADATA = frozenset({"requested_model", "resolved_model", "provider", "request_id", "code"})
+_SAFE_METADATA = frozenset({
+    "requested_model", "resolved_model", "provider", "request_id", "code",
+    "validation_kind", "schema_name",
+})
 
 
 class BudgetError(ProviderError):
