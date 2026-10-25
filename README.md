@@ -1,90 +1,98 @@
 # AgentWriter
 
-A local writing studio for concise technical articles and posts for Medium, LinkedIn and X.
+A source-aware technical writing studio built with **LangGraph, FastAPI and PostgreSQL**.
 
-[User guide](docs/user-guide.md) · [Get started](docs/setup-and-operations.md) · [Configuration](docs/configuration.md)
+I built this as a personal **AI Engineering portfolio project** and a workspace
+for writing about AI, data science and machine learning. It turns a research brief
+into an editable article, keeps evidence alongside the text, and prepares posts
+for Medium, LinkedIn and X. The author controls the final wording and publication.
 
-AgentWriter turns a brief into an editable Markdown draft. Choose your audience,
-tone and language, follow the writing progress, inspect the sources, and keep
-every saved revision. You decide what is ready to publish.
+[User guide](docs/user-guide.md) · [Setup](docs/setup-and-operations.md) · [Workflow](docs/workflow.md) · [CI](https://github.com/BatuhanYilmaz26/Agent-Writer/actions/workflows/ci.yml)
 
-![AgentWriter workspace showing a saved story, revision review and editorial findings](assets/writing-studio.png)
+![Technical article preview with a Pydantic code example, editorial review and revision history](assets/technical-writing-studio.jpg)
 
-*Local fixture demo with sample story text. Synthetic reviews demonstrate the workflow; they do not certify writing quality.*
+*An edited technical article sample in the local fixture profile. The screenshot
+shows the working interface; its synthetic source and review data do not demonstrate live model quality.*
 
-## What you can do
+## AI engineering in the project
 
-- **Write in five languages.** English, Turkish, Spanish, Portuguese and German.
-- **Find a timely topic.** Refresh publisher and research feeds on demand, inspect dates and sources, and spot ideas already used in your drafts.
-- **Work from your point of view.** Choose a concise technical profile, target length and research preference; add your angle, observations and primary sources.
-- **Keep evidence close.** Inspect source links, citation checks and claim-support findings alongside the draft.
-- **Sharpen the title.** Compare planning suggestions, edit the article headline and prepare revision-bound search metadata with practical reading notes.
-- **Edit with a history.** Save changes as new revisions, reopen earlier versions and download the exact Markdown you selected.
-- **Request a fresh review.** Assess a saved edit without rewriting it. The assessment belongs to that revision; later edits start unassessed.
-- **Prepare a publication bundle.** Edit LinkedIn/X extracts, check platform lengths, add an honest AI disclosure and export article text, HTML, Markdown and references. Posting stays in your hands.
-- **Keep a publishing log.** Save the links and dates of posts you published, tied to the exact article revision.
-- **Come back later.** Runs and progress are stored in PostgreSQL and processed by a separate worker.
+The focus is the workflow around generation: explicit contracts, retained evidence,
+bounded execution and reviewable outputs.
 
-## Get started
-
-Follow the [setup guide](docs/setup-and-operations.md) for Windows, Linux or the
-local Docker Compose profile. It covers the prerequisites, database, API and
-worker in one place. After startup, open the local workspace shown by the guide.
-
-The default fixture profile needs no AI account or API key and makes no model or
-research requests. Use it to explore the complete writing and revision workflow.
-
-To create your first draft, enter a topic, choose a language and select
-**Create draft**. Open **Edit Markdown** to make changes, then save a new revision.
-The [user guide](docs/user-guide.md) walks through research, review, downloads
-and saved drafts.
-
-## Local use and providers
-
-The current application is intended for localhost. Local authentication is a
-single workspace identity; hosted sign-in is not available. Keep the service on
-loopback rather than exposing it publicly.
-
-Live generation uses [OpenRouter](docs/providers.md#openrouter), with
-`openrouter/free` as the default model selection. Research can use
-[Treg](docs/providers.md#treg); Tavily is an optional, separately configured
-adapter. External calls require explicit server configuration and account checks.
-Free-only routing never falls back to a paid model, but capacity and model
-capabilities can vary between requests.
-
-Review source support, language fluency and editorial findings before publishing.
-An AI assessment or a valid citation does not establish that a claim is true.
-Fixture output is labeled synthetic, and non-English drafts require your review.
-
-## Documentation
-
-| Guide | What it covers |
+| Engineering area | Implementation |
 |---|---|
-| [User guide](docs/user-guide.md) | Creating, editing, reviewing and managing drafts |
-| [Setup and operations](docs/setup-and-operations.md) | Installation, local services, tests and maintenance |
-| [Configuration](docs/configuration.md) | Languages, providers, quotas and limits |
-| [Writing workflow](docs/workflow.md) | Planning, research, generation and review |
-| [Providers](docs/providers.md) | Account checks, routing, privacy and citations |
-| [Budgets](docs/budgets.md) | Request limits, cost accounting and retries |
+| **Stateful orchestration** | A [LangGraph](https://docs.langchain.com/oss/python/langgraph/overview) `StateGraph` with conditional research, parallel section drafting, assembly, editorial review and targeted rewrite limits. |
+| **Structured LLM outputs** | Pydantic contracts validate plans, section drafts and reviews; schema repair and model dispatches have explicit limits. |
+| **Evidence-grounded generation** | Bounded research adapters, stored source/excerpt identities and hashes, citation validation and conservative claim-support signals. |
+| **Durable execution** | PostgreSQL graph checkpoints, an independent worker, leased job ownership, idempotency, cancellation and replayable progress events. |
+| **Provider and cost controls** | OpenRouter routing, free-only defaults, request/token limits, budget accounting and explicit handling of provider failures. |
+| **Editorial control** | Immutable article revisions, assessments bound to exact content hashes, editable platform variants and manual publishing. |
+| **Evaluation** | A versioned fixture corpus, unit and real PostgreSQL integration tests, static checks and GitHub Actions CI. |
 
-## Project structure
+## Writing workflow
 
-| Path | Contents |
+```mermaid
+flowchart LR
+    brief["Writing brief"] --> policy{"Research needed?"}
+    policy -->|Yes| research["Search and extract evidence"]
+    policy -->|No| plan["Validated plan"]
+    research --> plan
+    plan --> draft["Parallel section drafting"]
+    draft --> assemble["Assembly and citation checks"]
+    assemble --> review["Editorial review"]
+    review -->|Bounded rewrite| draft
+    review -->|Save outcome| article["Versioned article"]
+    article --> author["Author edits and review"]
+    author --> export["Medium / LinkedIn / X bundle"]
+```
+
+Generation runs in the worker, outside the HTTP request. Checkpoints and committed
+progress let the browser reconnect without owning the writing process.
+
+## In the workspace
+
+- Discover technical topics from publisher and research feeds, inspect dates and add primary sources.
+- Write in English, Turkish, Spanish, Portuguese or German, with your own angle and observations.
+- Compare title suggestions, edit Markdown, inspect evidence and preserve each saved revision.
+- Prepare search-preview metadata, LinkedIn/X drafts and a downloadable article bundle with an AI-assistance disclosure.
+- Reopen saved drafts and record the links to articles you publish yourself.
+
+## Technology
+
+| Layer | Tools |
 |---|---|
-| `src/agentwriter/` | Application, browser workspace, writing workflow and worker |
+| Workflow and validation | Python 3.13, LangGraph, Pydantic |
+| API and progress | FastAPI, Uvicorn, asyncio, Server-Sent Events |
+| Persistence | PostgreSQL, Psycopg, LangGraph PostgreSQL checkpointer |
+| Providers | OpenRouter, HTTPX; Treg and optional Tavily research adapters |
+| Frontend | JavaScript modules, semantic HTML, CSS, safe Markdown rendering |
+| Development and operations | pytest, Ruff, Mypy, Docker Compose, GitHub Actions |
+
+## Scope and evaluation
+
+This is a personal localhost application. The default fixture profile makes no
+live model or research requests and allows the workflow to be explored without
+provider credentials. Live providers require explicit configuration; free-only
+routing has no paid fallback and remains subject to provider availability.
+
+CI exercises software behavior with fixtures and a disposable PostgreSQL database.
+Live article quality is a separate acceptance check. A valid schema, citation or
+model assessment does not establish factual accuracy; review the article and
+sources before publishing. Posting to external platforms is manual.
+
+## Documentation and code
+
+| Location | Contents |
+|---|---|
+| [User guide](docs/user-guide.md) | Drafting, editing, titles, evidence and publication bundles |
+| [Setup and operations](docs/setup-and-operations.md) | Local services, verification and maintenance |
+| [Configuration](docs/configuration.md) · [Providers](docs/providers.md) · [Budgets](docs/budgets.md) | Provider settings, limits and cost controls |
+| `src/agentwriter/` | Domain models, workflow, providers, API, persistence, worker and browser workspace |
 | `migrations/` | PostgreSQL schema migrations |
-| `tests/` | Unit and integration tests |
-| `evaluation/` | Versioned editorial rubric and regression corpus |
-| `scripts/` | Development and verification tools |
-| `ops/` | Monitoring and maintenance service definitions |
-| `docs/` | Product and operating guides |
-| `assets/` | Product screenshots |
+| `tests/` · `evaluation/` | Automated checks, versioned corpus and editorial rubric |
+| `scripts/` · `ops/` | Verification tools, monitoring and maintenance definitions |
+| `assets/` | Workspace screenshots |
 
-## Help and feedback
-
-Start with [troubleshooting](docs/user-guide.md#troubleshooting) for common issues.
-For a bug or feature request, [open an issue](https://github.com/BatuhanYilmaz26/Agent-Writer/issues).
-Include the steps to reproduce and what you expected. Leave out API keys,
-connection strings and private draft content.
-
-Maintained by [@BatuhanYilmaz26](https://github.com/BatuhanYilmaz26).
+Built by [@BatuhanYilmaz26](https://github.com/BatuhanYilmaz26).
+For bugs and suggestions, [open an issue](https://github.com/BatuhanYilmaz26/Agent-Writer/issues)
+with reproduction steps and no credentials or private draft content.
